@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/route_model.dart';
 import '../services/routes_service.dart';
 import 'route_detail_screen.dart';
+import '../widgets/route_card.dart';
 
 class RoutesScreen extends StatelessWidget {
   const RoutesScreen({super.key});
@@ -18,10 +19,8 @@ class RoutesScreen extends StatelessWidget {
         itemBuilder: (context, index) {
           final route = routes[index];
 
-          return ListTile(
-            title: Text(route.name),
-            subtitle: Text('${route.distance} km · ${route.difficulty}'),
-            trailing: const Icon(Icons.arrow_forward_ios),
+          return RouteCard(
+            route: route,
             onTap: () {
               Navigator.push(
                 context,
