@@ -6,26 +6,44 @@ class RoutesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final RouteModel exampleRoute = RouteModel(
-      name: 'Ruta del Montseny',
-      distance: 12.5,
-      elevation: 600,
-      difficulty: 'Mitjana',
-    );
+    final List<RouteModel> routes = [
+      RouteModel(
+        name: 'Ruta del Montseny',
+        distance: 12.5,
+        elevation: 600,
+        difficulty: 'Mitjana',
+      ),
+      RouteModel(
+        name: 'Camí de Ronda',
+        distance: 8.0,
+        elevation: 150,
+        difficulty: 'Fàcil',
+      ),
+      RouteModel(
+        name: 'Puigmal',
+        distance: 14.2,
+        elevation: 1100,
+        difficulty: 'Difícil',
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Rutes disponibles'),
       ),
-      body: Center(
-        child: Text(
-          '${exampleRoute.name}\n'
-          'Distància: ${exampleRoute.distance} km\n'
-          'Desnivell: ${exampleRoute.elevation} m\n'
-          'Dificultat: ${exampleRoute.difficulty}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 16),
-        ),
+      body: ListView.builder(
+        itemCount: routes.length,
+        itemBuilder: (context, index) {
+          final route = routes[index];
+
+          return ListTile(
+            title: Text(route.name),
+            subtitle: Text(
+              '${route.distance} km · ${route.difficulty}',
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios),
+          );
+        },
       ),
     );
   }
