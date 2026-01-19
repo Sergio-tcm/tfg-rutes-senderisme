@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/route_model.dart';
+import '../services/routes_service.dart';
 import 'route_detail_screen.dart';
 
 class RoutesScreen extends StatelessWidget {
@@ -7,26 +8,8 @@ class RoutesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<RouteModel> routes = [
-      RouteModel(
-        name: 'Ruta del Montseny',
-        distance: 12.5,
-        elevation: 600,
-        difficulty: 'Mitjana',
-      ),
-      RouteModel(
-        name: 'Camí de Ronda',
-        distance: 8.0,
-        elevation: 150,
-        difficulty: 'Fàcil',
-      ),
-      RouteModel(
-        name: 'Puigmal',
-        distance: 14.2,
-        elevation: 1100,
-        difficulty: 'Difícil',
-      ),
-    ];
+    final RoutesService routesService = RoutesService();
+    final List<RouteModel> routes = routesService.getRoutes();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Rutes disponibles')),
