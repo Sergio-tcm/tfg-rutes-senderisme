@@ -9,10 +9,42 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Rutes de senderisme'),
       ),
-      body: const Center(
-        child: Text(
-          'Pantalla inicial',
-          style: TextStyle(fontSize: 20),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Benvingut',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Aquesta aplicació permet descobrir i recomanar rutes de senderisme segons les preferències de l’usuari.',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 32),
+
+            ElevatedButton(
+              onPressed: () {},
+              child: const Text('Veure rutes'),
+            ),
+            const SizedBox(height: 12),
+
+            ElevatedButton(
+              onPressed: () {},
+              child: const Text('Recomanar ruta'),
+            ),
+            const SizedBox(height: 12),
+
+            ElevatedButton(
+              onPressed: () {},
+              child: const Text('Importar ruta GPX'),
+            ),
+          ],
         ),
       ),
     );
