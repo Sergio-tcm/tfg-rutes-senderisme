@@ -19,7 +19,7 @@ class RoutesService {
         name: 'Puigmal',
         distance: 14.2,
         elevation: 1100,
-        difficulty: 'Difícil',
+        difficulty: 'Mitjana',
       ),
     ];
   }

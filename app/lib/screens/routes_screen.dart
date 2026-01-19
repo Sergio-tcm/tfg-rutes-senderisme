@@ -32,9 +32,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
         _filteredRoutes = _allRoutes;
       } else {
         _filteredRoutes = _allRoutes
-            .where(
-              (route) => route.difficulty == _selectedDifficulty,
-            )
+            .where((route) => route.difficulty == _selectedDifficulty)
             .toList();
       }
     });
@@ -43,9 +41,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rutes disponibles'),
-      ),
+      appBar: AppBar(title: const Text('Rutes disponibles')),
       body: Column(
         children: [
           Padding(
@@ -58,18 +54,9 @@ class _RoutesScreenState extends State<RoutesScreen> {
                   value: 'Totes',
                   child: Text('Totes les dificultats'),
                 ),
-                DropdownMenuItem(
-                  value: 'Fàcil',
-                  child: Text('Fàcil'),
-                ),
-                DropdownMenuItem(
-                  value: 'Mitjana',
-                  child: Text('Mitjana'),
-                ),
-                DropdownMenuItem(
-                  value: 'Difícil',
-                  child: Text('Difícil'),
-                ),
+                DropdownMenuItem(value: 'Fàcil', child: Text('Fàcil')),
+                DropdownMenuItem(value: 'Mitjana', child: Text('Mitjana')),
+                DropdownMenuItem(value: 'Difícil', child: Text('Difícil')),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -80,25 +67,38 @@ class _RoutesScreenState extends State<RoutesScreen> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _filteredRoutes.length,
-              itemBuilder: (context, index) {
-                final route = _filteredRoutes[index];
-
-                return RouteCard(
-                  route: route,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            RouteDetailScreen(route: route),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+            child: _filteredRoutes.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text(
+                          'No hi ha rutes per aquesta dificultat',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _filteredRoutes.length,
+                    itemBuilder: (context, index) {
+                      final route = _filteredRoutes[index];
+                      return RouteCard(
+                        route: route,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  RouteDetailScreen(route: route),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
           ),
         ],
       ),
