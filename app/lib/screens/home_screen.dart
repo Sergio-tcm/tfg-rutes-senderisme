@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'routes_screen.dart';
 import 'recommend_screen.dart';
 import 'import_gpx_screen.dart';
+import 'map_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -60,6 +61,18 @@ class HomeScreen extends StatelessWidget {
                 );
               },
               child: const Text('Importar ruta GPX'),
+            ),
+
+            const SizedBox(height: 12),
+
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MapScreen()),
+                );
+              },
+              child: const Text('Veure mapa'),
             ),
           ],
         ),
