@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/route_model.dart';
+import 'route_detail_screen.dart';
 
 class RoutesScreen extends StatelessWidget {
   const RoutesScreen({super.key});
@@ -28,9 +29,7 @@ class RoutesScreen extends StatelessWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rutes disponibles'),
-      ),
+      appBar: AppBar(title: const Text('Rutes disponibles')),
       body: ListView.builder(
         itemCount: routes.length,
         itemBuilder: (context, index) {
@@ -38,10 +37,16 @@ class RoutesScreen extends StatelessWidget {
 
           return ListTile(
             title: Text(route.name),
-            subtitle: Text(
-              '${route.distance} km · ${route.difficulty}',
-            ),
+            subtitle: Text('${route.distance} km · ${route.difficulty}'),
             trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => RouteDetailScreen(route: route),
+                ),
+              );
+            },
           );
         },
       ),
