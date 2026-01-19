@@ -14,34 +14,25 @@ class RoutesScreen extends StatefulWidget {
 class _RoutesScreenState extends State<RoutesScreen> {
   final RoutesService _routesService = RoutesService();
 
-  late List<RouteModel> _allRoutes;
-  late List<RouteModel> _filteredRoutes;
-
   String _selectedDifficulty = 'Totes';
 
-  @override
-  void initState() {
-    super.initState();
-    _allRoutes = _routesService.getRoutes();
-    _filteredRoutes = _allRoutes;
-  }
-
-  void _filterRoutes() {
-    setState(() {
-      if (_selectedDifficulty == 'Totes') {
-        _filteredRoutes = _allRoutes;
-      } else {
-        _filteredRoutes = _allRoutes
-            .where((route) => route.difficulty == _selectedDifficulty)
-            .toList();
-      }
-    });
+  List<RouteModel> _applyFilter(
+    List<RouteModel> routes,
+  ) {
+    if (_selectedDifficulty == 'Totes') {
+      return routes;
+    }
+    return routes
+        .where((r) => r.difficulty == _selectedDifficulty)
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Rutes disponibles')),
+      appBar: AppBar(
+        title: const Text('Rutes disponibles'),
+      ),
       body: Column(
         children: [
           Padding(
@@ -54,51 +45,89 @@ class _RoutesScreenState extends State<RoutesScreen> {
                   value: 'Totes',
                   child: Text('Totes les dificultats'),
                 ),
-                DropdownMenuItem(value: 'Fàcil', child: Text('Fàcil')),
-                DropdownMenuItem(value: 'Mitjana', child: Text('Mitjana')),
-                DropdownMenuItem(value: 'Difícil', child: Text('Difícil')),
+                DropdownMenuItem(
+                  value: 'Fàcil',
+                  child: Text('Fàcil'),
+                ),
+                DropdownMenuItem(
+                  value: 'Mitjana',
+                  child: Text('Mitjana'),
+                ),
+                DropdownMenuItem(
+                  value: 'Difícil',
+                  child: Text('Difícil'),
+                ),
               ],
               onChanged: (value) {
                 if (value != null) {
-                  _selectedDifficulty = value;
-                  _filterRoutes();
+                  setState(() {
+                    _selectedDifficulty = value;
+                  });
                 }
               },
             ),
           ),
           Expanded(
-            child: _filteredRoutes.isEmpty
-                ? const Center(
+            child: FutureBuilder<List<RouteModel>>(
+              future: _routesService.getRoutes(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return const Center(
+                    child: Text('Error carregant les rutes'),
+                  );
+                }
+
+                final routes =
+                    _applyFilter(snapshot.data ?? []);
+
+                if (routes.isEmpty) {
+                  return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off, size: 48, color: Colors.grey),
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
                         SizedBox(height: 12),
                         Text(
                           'No hi ha rutes per aquesta dificultat',
-                          style: TextStyle(fontSize: 16),
                         ),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: _filteredRoutes.length,
-                    itemBuilder: (context, index) {
-                      final route = _filteredRoutes[index];
-                      return RouteCard(
-                        route: route,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  RouteDetailScreen(route: route),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: routes.length,
+                  itemBuilder: (context, index) {
+                    final route = routes[index];
+
+                    return RouteCard(
+                      route: route,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                RouteDetailScreen(
+                                    route: route),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
