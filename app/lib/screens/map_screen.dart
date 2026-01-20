@@ -17,6 +17,7 @@ class _MapScreenState extends State<MapScreen> {
   final GpxService gpxService = GpxService();
   final CulturalItemsService culturalService = CulturalItemsService();
   final MapController mapController = MapController();
+  final int activeRouteId = 1;
 
   List<LatLng> gpxPoints = [];
   List<CulturalItem> culturalItems = [];
@@ -40,7 +41,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> loadCulturalItems() async {
-    final items = await culturalService.getItems();
+    final items = await culturalService.getItemsByRoute(activeRouteId);
     setState(() {
       culturalItems = items;
     });
@@ -76,11 +77,7 @@ class _MapScreenState extends State<MapScreen> {
           if (gpxPoints.isNotEmpty)
             PolylineLayer(
               polylines: [
-                Polyline(
-                  points: gpxPoints,
-                  strokeWidth: 4,
-                  color: Colors.blue,
-                ),
+                Polyline(points: gpxPoints, strokeWidth: 4, color: Colors.blue),
               ],
             ),
 

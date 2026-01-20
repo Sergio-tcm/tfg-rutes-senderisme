@@ -1,4 +1,5 @@
 class CulturalItem {
+  final int routeId;
   final String title;
   final String description;
   final double latitude;
@@ -7,6 +8,7 @@ class CulturalItem {
   final String itemType;
 
   CulturalItem({
+    required this.routeId,
     required this.title,
     required this.description,
     required this.latitude,
