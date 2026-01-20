@@ -10,11 +10,13 @@ def get_routes():
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT r.route_id, r.name, r.description, r.distance_km,
-               r.difficulty, r.location, u.name
-        FROM routes r
-        JOIN users u ON r.creator_id = u.user_id
-        ORDER BY r.created_at DESC
+        SELECT
+          route_id, name, description, distance_km, difficulty,
+          elevation_gain, location, estimated_time, creator_id,
+          cultural_summary, has_historical_value, has_archaeology,
+          has_architecture, has_natural_interest, created_at
+        FROM routes
+        ORDER BY created_at DESC
     """)
     rows = cur.fetchall()
 
@@ -26,11 +28,19 @@ def get_routes():
         routes.append({
             "route_id": r[0],
             "name": r[1],
-            "description": r[2],
-            "distance_km": r[3],
-            "difficulty": r[4],
-            "location": r[5],
-            "creator_name": r[6],
+            "description": r[2] or "",
+            "distance_km": float(r[3] or 0),
+            "difficulty": r[4] or "",
+            "elevation_gain": int(r[5] or 0),
+            "location": r[6] or "",
+            "estimated_time": r[7] or "",
+            "creator_id": int(r[8]),
+            "cultural_summary": r[9] or "",
+            "has_historical_value": bool(r[10]),
+            "has_archaeology": bool(r[11]),
+            "has_architecture": bool(r[12]),
+            "has_natural_interest": bool(r[13]),
+            "created_at": r[14].isoformat() if r[14] else None,
         })
 
     return jsonify(routes), 200
@@ -42,33 +52,66 @@ def create_route():
     user_id = int(get_jwt_identity())
     data = request.get_json() or {}
 
-    name = data.get("name", "").strip()
-    description = data.get("description", "")
-    distance_km = data.get("distance_km")
-    difficulty = data.get("difficulty", "")
-    location = data.get("location", "")
-
+    name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "El nom de la ruta és obligatori"}), 400
+
+    description = data.get("description") or ""
+    distance_km = data.get("distance_km")
+    difficulty = data.get("difficulty") or ""
+    elevation_gain = data.get("elevation_gain")
+    location = data.get("location") or ""
+    estimated_time = data.get("estimated_time") or ""
+
+    cultural_summary = data.get("cultural_summary") or ""
+    has_historical_value = bool(data.get("has_historical_value", False))
+    has_archaeology = bool(data.get("has_archaeology", False))
+    has_architecture = bool(data.get("has_architecture", False))
+    has_natural_interest = bool(data.get("has_natural_interest", False))
 
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO routes (name, description, distance_km, difficulty, location, creator_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        RETURNING route_id
+        INSERT INTO routes (
+          name, description, distance_km, difficulty, elevation_gain,
+          location, estimated_time, creator_id,
+          cultural_summary, has_historical_value, has_archaeology,
+          has_architecture, has_natural_interest
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING
+          route_id, name, description, distance_km, difficulty,
+          elevation_gain, location, estimated_time, creator_id,
+          cultural_summary, has_historical_value, has_archaeology,
+          has_architecture, has_natural_interest, created_at
     """, (
-        name, description, distance_km, difficulty, location, user_id
+        name, description, distance_km, difficulty, elevation_gain,
+        location, estimated_time, user_id,
+        cultural_summary, has_historical_value, has_archaeology,
+        has_architecture, has_natural_interest
     ))
 
-    route_id = cur.fetchone()[0]
+    r = cur.fetchone()
     conn.commit()
-
     cur.close()
     conn.close()
 
     return jsonify({
-        "route_id": route_id,
-        "message": "Ruta creada correctament"
+        "route_id": r[0],
+        "name": r[1],
+        "description": r[2] or "",
+        "distance_km": float(r[3] or 0),
+        "difficulty": r[4] or "",
+        "elevation_gain": int(r[5] or 0),
+        "location": r[6] or "",
+        "estimated_time": r[7] or "",
+        "creator_id": int(r[8]),
+        "cultural_summary": r[9] or "",
+        "has_historical_value": bool(r[10]),
+        "has_archaeology": bool(r[11]),
+        "has_architecture": bool(r[12]),
+        "has_natural_interest": bool(r[13]),
+        "created_at": r[14].isoformat() if r[14] else None,
     }), 201
+
