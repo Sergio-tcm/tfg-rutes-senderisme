@@ -9,7 +9,7 @@ from routes.auth_routes import auth_bp
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev_secret_change_me")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 60 * 60  # 1 hora (en segundos)

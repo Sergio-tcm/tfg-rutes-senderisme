@@ -15,6 +15,12 @@ def register():
 
     if not name or not email or not password:
         return jsonify({"error": "Falten camps: name, email, password"}), 400
+    
+    if "@" not in email or "." not in email:
+        return jsonify({"error": "Email no vàlid"}), 400
+
+    if len(password) < 8:
+        return jsonify({"error": "Contrasenya massa curta (min 8)"}), 400
 
     password_hash = generate_password_hash(password)  # PBKDF2 por defecto
 
