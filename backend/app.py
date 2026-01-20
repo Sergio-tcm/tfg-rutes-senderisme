@@ -6,6 +6,8 @@ from flask_jwt_extended import JWTManager
 
 from routes.auth_routes import auth_bp
 
+from routes.routes_routes import routes_bp
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -21,6 +23,8 @@ def home():
     return {"message": "Backend funcionando!"}
 
 app.register_blueprint(auth_bp)
+app.register_blueprint(routes_bp)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
