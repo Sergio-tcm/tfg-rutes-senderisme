@@ -1,34 +1,107 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+import '../config/api_config.dart';
 import '../models/route_model.dart';
+import 'token_storage.dart';
 
 class RoutesService {
   Future<List<RouteModel>> getRoutes() async {
-    await Future.delayed(const Duration(seconds: 1)); // Simula carga
+    final url = Uri.parse('${ApiConfig.baseUrl}/routes');
+    final res = await http.get(url);
 
-    return [
-      RouteModel(
-        name: 'Ruta del Montseny',
-        distance: 12.5,
-        elevation: 600,
-        difficulty: 'Mitjana',
-        latitude: 41.759,
-        longitude: 2.445,
-      ),
-      RouteModel(
-        name: 'Camí de Ronda',
-        distance: 8.0,
-        elevation: 150,
-        difficulty: 'Fàcil',
-        latitude: 41.820,
-        longitude: 3.068,
-      ),
-      RouteModel(
-        name: 'Puigmal',
-        distance: 14.2,
-        elevation: 1100,
-        difficulty: 'Difícil',
-        latitude: 42.383,
-        longitude: 2.117,
-      ),
-    ];
+    if (res.statusCode != 200) {
+      throw Exception('Error carregant rutes (${res.statusCode})');
+    }
+
+    final body = jsonDecode(res.body);
+    if (body is! List) {
+      throw Exception('Resposta inesperada del servidor');
+    }
+
+    return body.map<RouteModel>((e) => RouteModel.fromJson(e)).toList();
+  }
+
+  /// Crear ruta (requiere JWT)
+  /// Devuelve la ruta completa creada (si el backend la devuelve),
+  /// o lanza excepción si hay error.
+  Future<RouteModel> createRoute({
+    required String name,
+    required String description,
+    required double distanceKm,
+    required String difficulty,
+    required int elevationGain,
+    required String location,
+    required String estimatedTime,
+    required String culturalSummary,
+    required bool hasHistoricalValue,
+    required bool hasArchaeology,
+    required bool hasArchitecture,
+    required bool hasNaturalInterest,
+  }) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('No hi ha sessió');
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/routes');
+
+    final res = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        // Importante: NO enviamos route_id ni creator_id ni created_at
+        // creator_id lo saca el backend del JWT
+        'name': name,
+        'description': description,
+        'distance_km': distanceKm,
+        'difficulty': difficulty,
+        'elevation_gain': elevationGain,
+        'location': location,
+        'estimated_time': estimatedTime,
+        'cultural_summary': culturalSummary,
+        'has_historical_value': hasHistoricalValue,
+        'has_archaeology': hasArchaeology,
+        'has_architecture': hasArchitecture,
+        'has_natural_interest': hasNaturalInterest,
+      }),
+    );
+
+    final decoded = _safeJsonDecode(res.body);
+
+    if (res.statusCode != 201) {
+      final err = (decoded is Map && decoded['error'] != null)
+          ? decoded['error'].toString()
+          : 'Error creant ruta (${res.statusCode})';
+      throw Exception(err);
+    }
+
+    // Opción ideal: backend devuelve la ruta completa creada
+    if (decoded is Map<String, dynamic> && decoded.containsKey('route_id')) {
+      return RouteModel.fromJson(decoded);
+    }
+
+    // Si backend devuelve {message, route_id} sin más:
+    if (decoded is Map && decoded['route_id'] != null) {
+      // hacemos un refetch completo
+      final routes = await getRoutes();
+      final id = int.parse(decoded['route_id'].toString());
+      final found = routes.where((r) => r.routeId == id).toList();
+      if (found.isNotEmpty) return found.first;
+    }
+
+    // Si no tenemos forma de reconstruir, forzamos error claro
+    throw Exception('Ruta creada però resposta del servidor incompleta');
+  }
+
+  dynamic _safeJsonDecode(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
   }
 }
