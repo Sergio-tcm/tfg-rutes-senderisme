@@ -1,39 +1,26 @@
-from flask import Flask, jsonify
+import os
+from dotenv import load_dotenv
+from flask import Flask
 from flask_cors import CORS
-from db import get_connection
+from flask_jwt_extended import JWTManager
+
+from routes.auth_routes import auth_bp
+
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/')
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev_secret_change_me")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 60 * 60  # 1 hora (en segundos)
+
+jwt = JWTManager(app)
+
+@app.route("/")
 def home():
-    return {'message': 'Backend funcionando!'}
+    return {"message": "Backend funcionando!"}
 
-@app.route('/routes', methods=['GET'])
-def get_routes():
-    conn = get_connection()
-    cur = conn.cursor()
+app.register_blueprint(auth_bp)
 
-    cur.execute("""
-        SELECT route_id, name, distance_km, difficulty
-        FROM routes
-    """)
-
-    rows = cur.fetchall()
-
-    routes = []
-    for row in rows:
-        routes.append({
-            'route_id': row[0],
-            'name': row[1],
-            'distance_km': row[2],
-            'difficulty': row[3],
-        })
-
-    cur.close()
-    conn.close()
-
-    return jsonify(routes)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
