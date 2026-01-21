@@ -1,20 +1,16 @@
+import 'package:app/screens/map_screen.dart';
 import 'package:flutter/material.dart';
 import '../models/route_model.dart';
 
 class RouteDetailScreen extends StatelessWidget {
   final RouteModel route;
 
-  const RouteDetailScreen({
-    super.key,
-    required this.route,
-  });
+  const RouteDetailScreen({super.key, required this.route});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(route.name),
-      ),
+      appBar: AppBar(title: Text(route.name)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -60,12 +56,21 @@ class RouteDetailScreen extends StatelessWidget {
             _SectionTitle(title: 'Dades de la ruta'),
             const SizedBox(height: 10),
 
-            _InfoRow(label: 'Distància', value: '${route.distanceKm.toStringAsFixed(1)} km'),
-            _InfoRow(label: 'Desnivell positiu', value: '${route.elevationGain} m+'),
+            _InfoRow(
+              label: 'Distància',
+              value: '${route.distanceKm.toStringAsFixed(1)} km',
+            ),
+            _InfoRow(
+              label: 'Desnivell positiu',
+              value: '${route.elevationGain} m+',
+            ),
             _InfoRow(label: 'Temps estimat', value: route.estimatedTime),
             _InfoRow(label: 'Dificultat', value: route.difficulty),
             _InfoRow(label: 'ID ruta', value: route.routeId.toString()),
-            _InfoRow(label: 'Creat per (ID)', value: route.creatorId.toString()),
+            _InfoRow(
+              label: 'Creat per (ID)',
+              value: route.creatorId.toString(),
+            ),
             _InfoRow(label: 'Creada el', value: _formatDate(route.createdAt)),
 
             const SizedBox(height: 18),
@@ -107,9 +112,11 @@ class RouteDetailScreen extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  // Aquí en el futuro: ir a MapScreen y cargar el GPX asociado a route_id
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Funcionalitat de mapa/GPX pròximament')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MapScreen(routeId: route.routeId),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.map),
@@ -138,10 +145,7 @@ class RouteDetailScreen extends StatelessWidget {
   }
 
   Widget _chip(String text) {
-    return Chip(
-      label: Text(text),
-      visualDensity: VisualDensity.compact,
-    );
+    return Chip(label: Text(text), visualDensity: VisualDensity.compact);
   }
 
   String _formatDate(DateTime dt) {
@@ -173,10 +177,7 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -196,12 +197,7 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
         ],
       ),
     );
