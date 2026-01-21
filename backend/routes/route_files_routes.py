@@ -65,16 +65,17 @@ def upload_route_file(route_id: int):
     f = request.files["file"]
     filename = (f.filename or "").lower()
 
-    if not filename.endswith(".gpx"):
+    if not (filename.endswith(".gpx") or filename.endswith(".gpx.xml")):
         cur.close()
         conn.close()
-        return jsonify({"error": "Només s'accepten fitxers .gpx"}), 400
+        return jsonify({"error": "Només s'accepten fitxers GPX (.gpx)"}), 400
 
     file_bytes = f.read()
-    if not file_bytes:
+    head = file_bytes[:2000].decode("utf-8", errors="ignore").lower()
+    if "<gpx" not in head:
         cur.close()
         conn.close()
-        return jsonify({"error": "Fitxer buit"}), 400
+        return jsonify({"error": "El fitxer no sembla un GPX vàlid"}), 400
 
     # 3) Subir a Storage
     object_path = f"{route_id}/{uuid.uuid4().hex}.gpx"
