@@ -42,6 +42,8 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   xml: ^6.5.0
   geolocator: ^13.0.2
+  url_launcher: ^6.3.0
+
 
 
 

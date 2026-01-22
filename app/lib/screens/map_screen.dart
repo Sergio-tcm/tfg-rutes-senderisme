@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/map_config.dart';
 import '../models/cultural_item.dart';
@@ -167,28 +168,97 @@ class _MapScreenState extends State<MapScreen> {
     return Colors.red;
   }
 
+  String _prettyType(String type) {
+    final t = type.toLowerCase();
+    if (t == 'architecture') return 'Arquitectura';
+    if (t == 'archaeology') return 'Arqueologia';
+    if (t == 'historical') return 'Històric';
+    if (t == 'natural') return 'Naturalesa';
+    return 'Altres';
+  }
+
+  String _shortText(String text, {int max = 260}) {
+    final clean = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (clean.length <= max) return clean;
+    return '${clean.substring(0, max)}…';
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   void _showCulturalItem(CulturalItem item) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(item.title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (item.period != null && item.period!.isNotEmpty)
-              Text('Període: ${item.period}'),
-            const SizedBox(height: 8),
-            Text(item.description),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tancar'),
+      showDragHandle: true,
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.title,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    label: Text(_prettyType(item.type)),
+                  ),
+                  if (item.period != null && item.period!.isNotEmpty)
+                    Chip(
+                      label: Text('Període: ${item.period}'),
+                    ),
+                  if (item.distanceM != null)
+                    Chip(
+                      label: Text(
+                        item.distanceM! >= 1000
+                            ? 'A ${(item.distanceM! / 1000).toStringAsFixed(1)} km'
+                            : 'A ${item.distanceM!.toStringAsFixed(0)} m',
+                      ),
+                    ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                _shortText(item.description),
+                style: const TextStyle(fontSize: 14),
+              ),
+
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: (item.sourceUrl != null && item.sourceUrl!.isNotEmpty)
+                          ? () => _openUrl(item.sourceUrl!)
+                          : null,
+                      icon: const Icon(Icons.open_in_new),
+                      label: const Text('Fitxa oficial'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Tancar'),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

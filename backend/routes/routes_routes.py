@@ -175,7 +175,7 @@ def cultural_items_near():
 
     if item_type:
         cur.execute("""
-            SELECT item_id, title, description, latitude, longitude, period, item_type
+            SELECT item_id, title, description, latitude, longitude, period, item_type, source_url
             FROM cultural_items
             WHERE latitude BETWEEN %s AND %s
               AND longitude BETWEEN %s AND %s
@@ -183,7 +183,7 @@ def cultural_items_near():
         """, (min_lat, max_lat, min_lon, max_lon, item_type))
     else:
         cur.execute("""
-            SELECT item_id, title, description, latitude, longitude, period, item_type
+            SELECT item_id, title, description, latitude, longitude, period, item_type, source_url
             FROM cultural_items
             WHERE latitude BETWEEN %s AND %s
               AND longitude BETWEEN %s AND %s
@@ -195,7 +195,7 @@ def cultural_items_near():
 
     out = []
     for r in rows:
-        item_id, title, desc, ilat, ilon, period, itype = r
+        item_id, title, desc, ilat, ilon, period, itype, source_url = r
         d = haversine_m(lat, lon, float(ilat), float(ilon))
         if d <= radius:
             out.append({
@@ -206,6 +206,7 @@ def cultural_items_near():
                 "longitude": float(ilon),
                 "period": period,
                 "item_type": itype,
+                "source_url": source_url,
                 "distance_m": round(d, 1),
             })
 

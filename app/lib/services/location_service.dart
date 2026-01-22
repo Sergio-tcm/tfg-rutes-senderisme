@@ -2,12 +2,12 @@ import 'package:geolocator/geolocator.dart';
 
 class LocationService {
   Future<Position> getCurrentPosition() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       throw Exception('Activa la ubicació del dispositiu');
     }
 
-    LocationPermission permission = await Geolocator.checkPermission();
+    var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
@@ -18,6 +18,11 @@ class LocationService {
       throw Exception('Permís de ubicació denegat permanentment');
     }
 
-    return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    // Nuevo API (sin desiredAccuracy)
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+    );
+
+    return Geolocator.getCurrentPosition(locationSettings: settings);
   }
 }
