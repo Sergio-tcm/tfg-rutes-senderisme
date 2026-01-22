@@ -6,7 +6,7 @@ from flask_jwt_extended import JWTManager
 
 from routes.auth_routes import auth_bp
 
-from routes.routes_routes import routes_bp
+from routes.routes_routes import routes_bp, cultural_bp
 
 from routes.route_files_routes import route_files_bp
 
@@ -30,6 +30,7 @@ def home():
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(routes_bp)
+app.register_blueprint(cultural_bp)
 
 
 if __name__ == "__main__":

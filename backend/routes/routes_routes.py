@@ -1,8 +1,12 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from db import get_connection
+import math
+from utils.geo import haversine_m
 
 routes_bp = Blueprint("routes", __name__, url_prefix="/routes")
+
+cultural_bp = Blueprint("cultural", __name__)
 
 @routes_bp.route("", methods=["GET"])
 def get_routes():
@@ -144,3 +148,67 @@ def get_cultural_items(route_id):
         })
 
     return jsonify(items), 200
+
+
+@cultural_bp.route("/cultural-items/near", methods=["GET"])
+def cultural_items_near():
+    lat = request.args.get("lat", type=float)
+    lon = request.args.get("lon", type=float)
+    radius = request.args.get("radius", default=2000, type=int)  # metros
+    item_type = request.args.get("type", default=None, type=str)
+
+    if lat is None or lon is None:
+        return jsonify({"error": "lat i lon són obligatoris"}), 400
+
+    # Bounding box aproximada
+    # 1 grado lat ~ 111.32km; lon depende de lat
+    lat_deg = radius / 111_320.0
+    lon_deg = radius / (111_320.0 * max(0.2, abs(math.cos(math.radians(lat)))))
+
+    min_lat = lat - lat_deg
+    max_lat = lat + lat_deg
+    min_lon = lon - lon_deg
+    max_lon = lon + lon_deg
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    if item_type:
+        cur.execute("""
+            SELECT item_id, title, description, latitude, longitude, period, item_type
+            FROM cultural_items
+            WHERE latitude BETWEEN %s AND %s
+              AND longitude BETWEEN %s AND %s
+              AND LOWER(item_type) = LOWER(%s)
+        """, (min_lat, max_lat, min_lon, max_lon, item_type))
+    else:
+        cur.execute("""
+            SELECT item_id, title, description, latitude, longitude, period, item_type
+            FROM cultural_items
+            WHERE latitude BETWEEN %s AND %s
+              AND longitude BETWEEN %s AND %s
+        """, (min_lat, max_lat, min_lon, max_lon))
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    out = []
+    for r in rows:
+        item_id, title, desc, ilat, ilon, period, itype = r
+        d = haversine_m(lat, lon, float(ilat), float(ilon))
+        if d <= radius:
+            out.append({
+                "item_id": item_id,
+                "title": title,
+                "description": desc,
+                "latitude": float(ilat),
+                "longitude": float(ilon),
+                "period": period,
+                "item_type": itype,
+                "distance_m": round(d, 1),
+            })
+
+    # Ordena por cercanía
+    out.sort(key=lambda x: x["distance_m"])
+    return jsonify(out)
