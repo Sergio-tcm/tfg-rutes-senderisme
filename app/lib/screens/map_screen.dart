@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -21,6 +24,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
+  late final StreamSubscription<MapEvent> _mapEventSubscription;
 
   // GPX / Route
   final _routeFilesService = RouteFilesService();
@@ -36,8 +40,9 @@ class _MapScreenState extends State<MapScreen> {
 
   List<LatLng> _track = const [];
   List<CulturalItem> _nearItems = const [];
+  LatLng? _currentPosition;
 
-  // valores iniciales “neutros”
+  // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
   static const double _defaultZoom = 12;
 
@@ -47,11 +52,21 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
 
+    _mapEventSubscription = _mapController.mapEventStream.listen((event) {
+      setState(() {});
+    });
+
     if (widget.routeId != null) {
       _loadRouteTrack(widget.routeId!);
     } else {
       _loadNearMe();
     }
+  }
+
+  @override
+  void dispose() {
+    _mapEventSubscription.cancel();
+    super.dispose();
   }
 
   Future<void> _loadNearMe() async {
@@ -64,6 +79,7 @@ class _MapScreenState extends State<MapScreen> {
 
     try {
       final pos = await _locationService.getCurrentPosition();
+      _currentPosition = LatLng(pos.latitude, pos.longitude);
 
       final items = await _culturalNearService.near(
         lat: pos.latitude,
@@ -78,10 +94,7 @@ class _MapScreenState extends State<MapScreen> {
       // centra el mapa en tu posición
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _mapController.move(
-          LatLng(pos.latitude, pos.longitude),
-          14,
-        );
+        _adjustZoomForRadius();
       });
     } catch (e) {
       setState(() {
@@ -189,6 +202,25 @@ class _MapScreenState extends State<MapScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  double _calculatePixelRadius(double meters) {
+    if (_currentPosition == null) return 0;
+    final zoom = _mapController.camera.zoom;
+    final lat = _currentPosition!.latitude;
+    final metersPerPixel = 156543.0339 * cos(lat * pi / 180) / pow(2, zoom);
+    return meters / metersPerPixel;
+  }
+
+  void _adjustZoomForRadius() {
+    if (_currentPosition == null) return;
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final diameterMeters = 2 * _radiusM * 1.2; // 20% margin
+    final desiredMetersPerPixel = diameterMeters / screenWidth;
+    final lat = _currentPosition!.latitude;
+    final zoom = log(156543.0339 * cos(lat * pi / 180) / desiredMetersPerPixel) / log(2);
+    _mapController.move(_currentPosition!, zoom.clamp(1.0, 18.0));
+  }
+
   void _showCulturalItem(CulturalItem item) {
     showModalBottomSheet(
       context: context,
@@ -284,14 +316,26 @@ class _MapScreenState extends State<MapScreen> {
               tooltip: 'Radi de cerca',
               onSelected: (v) {
                 setState(() => _radiusM = v);
-                _loadNearMe();
+                _adjustZoomForRadius();
+                _reloadNearItems();
               },
               itemBuilder: (_) => const [
+                PopupMenuItem(value: 500, child: Text('500 m')),
                 PopupMenuItem(value: 1000, child: Text('1 km')),
                 PopupMenuItem(value: 2000, child: Text('2 km')),
+                PopupMenuItem(value: 3000, child: Text('3 km')),
                 PopupMenuItem(value: 5000, child: Text('5 km')),
+                PopupMenuItem(value: 10000, child: Text('10 km')),
               ],
-              icon: const Icon(Icons.tune),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border.all(color: Theme.of(context).colorScheme.outline),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(_radiusM >= 1000 ? '${(_radiusM / 1000).toInt()} km' : '$_radiusM m'),
+              ),
             ),
           if (!isRouteMode)
             IconButton(
@@ -356,6 +400,33 @@ class _MapScreenState extends State<MapScreen> {
                     );
                   }).toList(),
                 ),
+
+              // marker ubicación actual
+              if (_currentPosition != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _currentPosition!,
+                      width: 40,
+                      height: 40,
+                      child: const Icon(Icons.my_location, color: Colors.blue),
+                    ),
+                  ],
+                ),
+
+              // círculo de radio
+              if (_currentPosition != null)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _currentPosition!,
+                      radius: _calculatePixelRadius(_radiusM.toDouble()),
+                      color: Colors.blue.withAlpha(51),
+                      borderColor: Colors.blue,
+                      borderStrokeWidth: 2,
+                    ),
+                  ],
+                ),
             ],
           ),
 
@@ -403,5 +474,32 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _reloadNearItems() async {
+    if (_currentPosition == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _nearItems = const [];
+    });
+
+    try {
+      final items = await _culturalNearService.near(
+        lat: _currentPosition!.latitude,
+        lon: _currentPosition!.longitude,
+        radius: _radiusM,
+      );
+
+      setState(() {
+        _nearItems = items;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      setState(() => _loading = false);
+    }
   }
 }
