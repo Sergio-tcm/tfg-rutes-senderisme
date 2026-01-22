@@ -96,6 +96,28 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  IconData _iconForType(String type) {
+    final t = type.toLowerCase();
+
+    if (t.contains('archaeo') || t.contains('arqueo')) return Icons.museum;
+    if (t.contains('architec') || t.contains('arquitec')) return Icons.account_balance;
+    if (t.contains('hist')) return Icons.history_edu;
+    if (t.contains('natur')) return Icons.park;
+
+    return Icons.place;
+  }
+
+  Color _colorForType(String type) {
+    final t = type.toLowerCase();
+
+    if (t.contains('archaeo') || t.contains('arqueo')) return Colors.brown;
+    if (t.contains('architec') || t.contains('arquitec')) return Colors.deepPurple;
+    if (t.contains('hist')) return Colors.indigo;
+    if (t.contains('natur')) return Colors.green;
+
+    return Colors.red;
+  }
+
   @override
   Widget build(BuildContext context) {
     final polylines = _track.isEmpty
@@ -158,9 +180,10 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                           );
                         },
-                        child: const Icon(
-                          Icons.account_balance,
-                          color: Colors.deepPurple,
+                        child: Icon(
+                          _iconForType(item.type),
+                          color: _colorForType(item.type),
+                          size: 34,
                         ),
                       ),
                     );
@@ -195,7 +218,51 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ),
+          Positioned(
+            right: 12,
+            top: 12,
+            child: _Legend(),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    Widget row(IconData icon, Color color, String text) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 6),
+            Text(text, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Llegenda', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            row(Icons.museum, Colors.brown, 'Arqueologia'),
+            row(Icons.account_balance, Colors.deepPurple, 'Arquitectura'),
+            row(Icons.history_edu, Colors.indigo, 'Històric'),
+            row(Icons.park, Colors.green, 'Naturalesa'),
+          ],
+        ),
       ),
     );
   }
