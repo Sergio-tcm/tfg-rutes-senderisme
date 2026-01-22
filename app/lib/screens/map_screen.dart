@@ -1,4 +1,6 @@
 import 'package:app/config/map_config.dart';
+import 'package:app/models/cultural_item.dart';
+import 'package:app/services/cultural_items_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -20,11 +22,13 @@ class _MapScreenState extends State<MapScreen> {
   final _downloadService = GpxDownloadService();
   final _pointsParser = GpxPointsParser();
   final MapController _mapController = MapController();
+  final _culturalService = CulturalItemsService();
 
   bool _loading = false;
   String? _error;
 
   List<LatLng> _track = const [];
+  List<CulturalItem> _culturalItems = [];
 
   @override
   void initState() {
@@ -65,9 +69,12 @@ class _MapScreenState extends State<MapScreen> {
         throw Exception('El GPX no conté punts suficients');
       }
 
+      final culturalItems = await _culturalService.getByRoute(routeId);
+
       // Guardamos el track en estado (para pintar la polyline)
       setState(() {
         _track = points;
+        _culturalItems = culturalItems;
       });
 
       // Ajustar cámara para que se vea toda la ruta
@@ -127,6 +134,37 @@ class _MapScreenState extends State<MapScreen> {
                       child: const Icon(Icons.flag_outlined),
                     ),
                   ],
+                ),
+              if (_culturalItems.isNotEmpty)
+                MarkerLayer(
+                  markers: _culturalItems.map((item) {
+                    return Marker(
+                      point: LatLng(item.latitude, item.longitude),
+                      width: 40,
+                      height: 40,
+                      child: GestureDetector(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: Text(item.title),
+                              content: Text(item.description),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Tancar'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        child: const Icon(
+                          Icons.account_balance,
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
             ],
           ),
