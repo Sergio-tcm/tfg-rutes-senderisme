@@ -115,7 +115,7 @@ def create_route():
         "created_at": r[14].isoformat() if r[14] else None,
     }), 201
 
-@routes_bp.route("/routes/<int:route_id>/cultural-items", methods=["GET"])
+@routes_bp.route("/<int:route_id>/cultural-items", methods=["GET"])
 def get_cultural_items(route_id):
     conn = get_connection()
     cur = conn.cursor()
@@ -124,6 +124,7 @@ def get_cultural_items(route_id):
         SELECT item_id, title, description, latitude, longitude, period, item_type
         FROM cultural_items
         WHERE route_id = %s
+        ORDER BY item_id ASC
     """, (route_id,))
 
     rows = cur.fetchall()
@@ -142,4 +143,4 @@ def get_cultural_items(route_id):
             "item_type": r[6],
         })
 
-    return jsonify(items)
+    return jsonify(items), 200
