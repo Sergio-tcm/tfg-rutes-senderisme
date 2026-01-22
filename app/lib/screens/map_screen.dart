@@ -1,10 +1,11 @@
-import 'package:app/config/map_config.dart';
-import 'package:app/models/cultural_item.dart';
-import 'package:app/services/cultural_items_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../config/map_config.dart';
+import '../models/cultural_item.dart';
+import '../services/cultural_near_service.dart';
+import '../services/location_service.dart';
 import '../services/route_files_service.dart';
 import '../services/gpx_download_service.dart';
 import '../services/gpx_points_parser.dart';
@@ -18,23 +19,75 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  final MapController _mapController = MapController();
+
+  // GPX / Route
   final _routeFilesService = RouteFilesService();
   final _downloadService = GpxDownloadService();
   final _pointsParser = GpxPointsParser();
-  final MapController _mapController = MapController();
-  final _culturalService = CulturalItemsService();
+
+  // Near me cultural
+  final _locationService = LocationService();
+  final _culturalNearService = CulturalNearService();
 
   bool _loading = false;
   String? _error;
 
   List<LatLng> _track = const [];
-  List<CulturalItem> _culturalItems = [];
+  List<CulturalItem> _nearItems = const [];
+
+  // valores iniciales “neutros”
+  static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
+  static const double _defaultZoom = 12;
+
+  int _radiusM = 2000;
 
   @override
   void initState() {
     super.initState();
+
     if (widget.routeId != null) {
       _loadRouteTrack(widget.routeId!);
+    } else {
+      _loadNearMe();
+    }
+  }
+
+  Future<void> _loadNearMe() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _nearItems = const [];
+      _track = const [];
+    });
+
+    try {
+      final pos = await _locationService.getCurrentPosition();
+
+      final items = await _culturalNearService.near(
+        lat: pos.latitude,
+        lon: pos.longitude,
+        radius: _radiusM,
+      );
+
+      setState(() {
+        _nearItems = items;
+      });
+
+      // centra el mapa en tu posición
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _mapController.move(
+          LatLng(pos.latitude, pos.longitude),
+          14,
+        );
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      setState(() => _loading = false);
     }
   }
 
@@ -43,6 +96,7 @@ class _MapScreenState extends State<MapScreen> {
       _loading = true;
       _error = null;
       _track = const [];
+      _nearItems = const [];
     });
 
     try {
@@ -69,22 +123,20 @@ class _MapScreenState extends State<MapScreen> {
         throw Exception('El GPX no conté punts suficients');
       }
 
-      final culturalItems = await _culturalService.getByRoute(routeId);
-
-      // Guardamos el track en estado (para pintar la polyline)
       setState(() {
         _track = points;
-        _culturalItems = culturalItems;
       });
 
-      // Ajustar cámara para que se vea toda la ruta
+      // Ajustar cámara para ver toda la ruta
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
 
         final bounds = LatLngBounds.fromPoints(points);
-
         _mapController.fitCamera(
-          CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.all(40),
+          ),
         );
       });
     } catch (e) {
@@ -96,50 +148,107 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // ---------- UI helpers ----------
   IconData _iconForType(String type) {
     final t = type.toLowerCase();
-
     if (t.contains('archaeo') || t.contains('arqueo')) return Icons.museum;
     if (t.contains('architec') || t.contains('arquitec')) return Icons.account_balance;
     if (t.contains('hist')) return Icons.history_edu;
     if (t.contains('natur')) return Icons.park;
-
     return Icons.place;
   }
 
   Color _colorForType(String type) {
     final t = type.toLowerCase();
-
     if (t.contains('archaeo') || t.contains('arqueo')) return Colors.brown;
     if (t.contains('architec') || t.contains('arquitec')) return Colors.deepPurple;
     if (t.contains('hist')) return Colors.indigo;
     if (t.contains('natur')) return Colors.green;
-
     return Colors.red;
+  }
+
+  void _showCulturalItem(CulturalItem item) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(item.title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (item.period != null && item.period!.isNotEmpty)
+              Text('Període: ${item.period}'),
+            const SizedBox(height: 8),
+            Text(item.description),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tancar'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isRouteMode = widget.routeId != null;
+
     final polylines = _track.isEmpty
         ? <Polyline>[]
-        : [Polyline(points: _track, strokeWidth: 4.0)];
+        : [
+            Polyline(
+              points: _track,
+              strokeWidth: 4.0,
+            ),
+          ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.routeId == null ? 'Mapa' : 'Mapa de la ruta'),
+        title: Text(isRouteMode ? 'Mapa de la ruta' : 'Mapa cultural'),
+        actions: [
+          if (!isRouteMode)
+            PopupMenuButton<int>(
+              tooltip: 'Radi de cerca',
+              onSelected: (v) {
+                setState(() => _radiusM = v);
+                _loadNearMe();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 1000, child: Text('1 km')),
+                PopupMenuItem(value: 2000, child: Text('2 km')),
+                PopupMenuItem(value: 5000, child: Text('5 km')),
+              ],
+              icon: const Icon(Icons.tune),
+            ),
+          if (!isRouteMode)
+            IconButton(
+              tooltip: 'Recarregar (prop)',
+              icon: const Icon(Icons.my_location),
+              onPressed: _loadNearMe,
+            ),
+        ],
       ),
       body: Stack(
         children: [
           FlutterMap(
             mapController: _mapController,
-            options: MapOptions(initialCenter: const LatLng(41.3874, 2.1686), initialZoom: 12),
+            options: const MapOptions(
+              initialCenter: _defaultCenter,
+              initialZoom: _defaultZoom,
+            ),
             children: [
               TileLayer(
                 urlTemplate:
                     'https://api.mapbox.com/styles/v1/${MapConfig.mapboxStyleId}/tiles/256/{z}/{x}/{y}@2x?access_token=${MapConfig.mapboxAccessToken}',
                 userAgentPackageName: 'com.example.app',
               ),
+
               if (_track.isNotEmpty) PolylineLayer(polylines: polylines),
+
+              // markers inicio/fin si hay track
               if (_track.isNotEmpty)
                 MarkerLayer(
                   markers: [
@@ -157,29 +266,17 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ],
                 ),
-              if (_culturalItems.isNotEmpty)
+
+              // markers culturales (modo global)
+              if (!isRouteMode && _nearItems.isNotEmpty)
                 MarkerLayer(
-                  markers: _culturalItems.map((item) {
+                  markers: _nearItems.map((item) {
                     return Marker(
                       point: LatLng(item.latitude, item.longitude),
-                      width: 40,
-                      height: 40,
+                      width: 44,
+                      height: 44,
                       child: GestureDetector(
-                        onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: Text(item.title),
-                              content: Text(item.description),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Tancar'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                        onTap: () => _showCulturalItem(item),
                         child: Icon(
                           _iconForType(item.type),
                           color: _colorForType(item.type),
@@ -218,51 +315,22 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ),
-          Positioned(
-            right: 12,
-            top: 12,
-            child: _Legend(),
-          ),
+
+          // contador simple (modo global)
+          if (!isRouteMode)
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: Material(
+                elevation: 3,
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: Text('${_nearItems.length} punts'),
+                ),
+              ),
+            ),
         ],
-      ),
-    );
-  }
-}
-
-class _Legend extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    Widget row(IconData icon, Color color, String text) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 6),
-            Text(text, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-      );
-    }
-
-    return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Llegenda', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            row(Icons.museum, Colors.brown, 'Arqueologia'),
-            row(Icons.account_balance, Colors.deepPurple, 'Arquitectura'),
-            row(Icons.history_edu, Colors.indigo, 'Històric'),
-            row(Icons.park, Colors.green, 'Naturalesa'),
-          ],
-        ),
       ),
     );
   }
