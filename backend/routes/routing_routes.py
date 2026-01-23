@@ -64,14 +64,16 @@ def walking_route():
         # Steps: extract unique road types
         def classify_road(name):
             name = name.lower()
-            if any(word in name for word in ['camino', 'sendero', 'camí', 'send', 'track', 'path']):
+            if any(word in name for word in ['camino', 'sendero', 'camí', 'send', 'track', 'path', 'vereda', 'pista', 'senda', 'trail', 'footpath', 'sender']):
                 return 'Camino'
-            if any(word in name for word in ['carretera', 'autovia', 'autopista', 'highway', 'road']):
+            if any(word in name for word in ['carretera', 'autovia', 'autopista', 'highway', 'road', 'vía', 'calzada', 'ruta', 'autovía']):
                 return 'Carretera'
-            if any(word in name for word in ['carrer', 'avinguda', 'plaça', 'street', 'avenue', 'square']):
+            if any(word in name for word in ['carrer', 'avinguda', 'plaça', 'street', 'avenue', 'square', 'calle', 'plaza', 'paseo', 'rambla', 'travessera', 'passatge', 'ronda', 'glorieta', 'rotonda', 'passeig', 'plaça']):
                 return 'Carrer'
-            if any(word in name for word in ['pont', 'bridge']):
+            if any(word in name for word in ['pont', 'bridge', 'puente']):
                 return 'Pont'
+            if any(word in name for word in ['parc', 'jardí', 'park', 'garden', 'bosque', 'forest']):
+                return 'Parc'
             return 'Altres' if name else None
 
         steps = []
