@@ -132,141 +132,374 @@ class _ImportGpxScreenState extends State<ImportGpxScreen> {
     final parsed = _parsed;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Importar GPX')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ElevatedButton.icon(
-            onPressed: _loading ? null : _pickGpx,
-            icon: const Icon(Icons.upload_file),
-            label: Text(_gpxFile == null ? 'Seleccionar GPX' : 'Canviar GPX'),
+      appBar: AppBar(
+        title: const Text('Importar GPX'),
+        backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
+        elevation: 4,
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.green[50]!, Colors.white],
           ),
-
-          const SizedBox(height: 12),
-
-          if (parsed != null) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Fitxer: ${_gpxFile!.path.split('/').last}'),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Distància: ${parsed.distanceKm.toStringAsFixed(2)} km',
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.green[600]!, Colors.green[800]!],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
-                    Text('Desnivell +: ${parsed.elevationGain} m'),
-                    Text('Punts: ${parsed.pointsCount}'),
-                  ],
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withAlpha(77),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _loading ? null : _pickGpx,
+                    icon: const Icon(Icons.upload_file, color: Colors.white),
+                    label: Text(
+                      _gpxFile == null ? 'Seleccionar GPX' : 'Canviar GPX',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
-              ),
+
+                const SizedBox(height: 12),
+
+                if (parsed != null) ...[
+                  AnimatedOpacity(
+                    opacity: 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    child: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.white, Colors.green[50]!],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.insert_drive_file, color: Colors.green[700]),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Fitxer: ${_gpxFile!.path.split('/').last}',
+                                      style: TextStyle(color: Colors.green[800], fontSize: 16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Distància: ${parsed.distanceKm.toStringAsFixed(2)} km',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              Text('Desnivell +: ${parsed.elevationGain} m', style: const TextStyle(fontSize: 16)),
+                              Text('Punts: ${parsed.pointsCount}', style: const TextStyle(fontSize: 16)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: TextField(
+                    controller: _nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Nom de la ruta',
+                      prefixIcon: const Icon(Icons.title, color: Colors.green),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.green[700]!, width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: TextField(
+                    controller: _locationCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Ubicació',
+                      prefixIcon: const Icon(Icons.location_on, color: Colors.green),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.green[700]!, width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: TextField(
+                    controller: _descCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Descripció',
+                      prefixIcon: const Icon(Icons.description, color: Colors.green),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.green[700]!, width: 2),
+                      ),
+                    ),
+                    maxLines: 3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Dificultat', style: TextStyle(fontSize: 16)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.green[200]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButton<String>(
+                          value: _difficulty,
+                          isExpanded: true,
+                          underline: const SizedBox(),
+                          items: const [
+                            DropdownMenuItem(value: 'Fàcil', child: Text('Fàcil', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: 'Mitjana', child: Text('Mitjana', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: 'Difícil', child: Text('Difícil', style: TextStyle(fontSize: 16))),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (v) => setState(() => _difficulty = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Temps estimat', style: TextStyle(fontSize: 16)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.green[200]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButton<String>(
+                          value: _estimatedTime,
+                          isExpanded: true,
+                          underline: const SizedBox(),
+                          items: const [
+                            DropdownMenuItem(value: '1h', child: Text('1h', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: '2h', child: Text('2h', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: '3h', child: Text('3h', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: '4h', child: Text('4h', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: '5h', child: Text('5h', style: TextStyle(fontSize: 16))),
+                            DropdownMenuItem(value: '6h+', child: Text('6h+', style: TextStyle(fontSize: 16))),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (v) => setState(() => _estimatedTime = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Interès cultural', style: TextStyle(fontSize: 16)),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          FilterChip(
+                            label: const Text('Històric', style: TextStyle(fontSize: 16)),
+                            selected: _hist,
+                            selectedColor: Colors.green[200],
+                            checkmarkColor: Colors.green[800],
+                            onSelected: _loading ? null : (v) => setState(() => _hist = v),
+                          ),
+                          FilterChip(
+                            label: const Text('Arqueologia', style: TextStyle(fontSize: 16)),
+                            selected: _archaeo,
+                            selectedColor: Colors.green[200],
+                            checkmarkColor: Colors.green[800],
+                            onSelected: _loading
+                                ? null
+                                : (v) => setState(() => _archaeo = v),
+                          ),
+                          FilterChip(
+                            label: const Text('Arquitectura', style: TextStyle(fontSize: 16)),
+                            selected: _arch,
+                            selectedColor: Colors.green[200],
+                            checkmarkColor: Colors.green[800],
+                            onSelected: _loading ? null : (v) => setState(() => _arch = v),
+                          ),
+                          FilterChip(
+                            label: const Text('Naturalesa', style: TextStyle(fontSize: 16)),
+                            selected: _nature,
+                            selectedColor: Colors.green[200],
+                            checkmarkColor: Colors.green[800],
+                            onSelected: _loading
+                                ? null
+                                : (v) => setState(() => _nature = v),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                if (_error != null)
+                  AnimatedOpacity(
+                    opacity: 1.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error, color: Colors.red[700]),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: TextStyle(color: Colors.red[700], fontSize: 16),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 8),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.green[600]!, Colors.green[800]!],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.green.withAlpha(77),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _loading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.save, color: Colors.white),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Crear ruta i pujar GPX',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-          ],
-
-          TextField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(labelText: 'Nom de la ruta'),
           ),
-          const SizedBox(height: 10),
-
-          TextField(
-            controller: _locationCtrl,
-            decoration: const InputDecoration(labelText: 'Ubicació'),
-          ),
-          const SizedBox(height: 10),
-
-          TextField(
-            controller: _descCtrl,
-            decoration: const InputDecoration(labelText: 'Descripció'),
-            maxLines: 3,
-          ),
-          const SizedBox(height: 14),
-
-          const Text('Dificultat'),
-          DropdownButton<String>(
-            value: _difficulty,
-            isExpanded: true,
-            items: const [
-              DropdownMenuItem(value: 'Fàcil', child: Text('Fàcil')),
-              DropdownMenuItem(value: 'Mitjana', child: Text('Mitjana')),
-              DropdownMenuItem(value: 'Difícil', child: Text('Difícil')),
-            ],
-            onChanged: _loading
-                ? null
-                : (v) => setState(() => _difficulty = v!),
-          ),
-
-          const SizedBox(height: 14),
-
-          const Text('Temps estimat'),
-          DropdownButton<String>(
-            value: _estimatedTime,
-            isExpanded: true,
-            items: const [
-              DropdownMenuItem(value: '1h', child: Text('1h')),
-              DropdownMenuItem(value: '2h', child: Text('2h')),
-              DropdownMenuItem(value: '3h', child: Text('3h')),
-              DropdownMenuItem(value: '4h', child: Text('4h')),
-              DropdownMenuItem(value: '5h', child: Text('5h')),
-              DropdownMenuItem(value: '6h+', child: Text('6h+')),
-            ],
-            onChanged: _loading
-                ? null
-                : (v) => setState(() => _estimatedTime = v!),
-          ),
-
-          const SizedBox(height: 14),
-
-          const Text('Interès cultural'),
-          Wrap(
-            spacing: 8,
-            children: [
-              FilterChip(
-                label: const Text('Històric'),
-                selected: _hist,
-                onSelected: _loading ? null : (v) => setState(() => _hist = v),
-              ),
-              FilterChip(
-                label: const Text('Arqueologia'),
-                selected: _archaeo,
-                onSelected: _loading
-                    ? null
-                    : (v) => setState(() => _archaeo = v),
-              ),
-              FilterChip(
-                label: const Text('Arquitectura'),
-                selected: _arch,
-                onSelected: _loading ? null : (v) => setState(() => _arch = v),
-              ),
-              FilterChip(
-                label: const Text('Naturalesa'),
-                selected: _nature,
-                onSelected: _loading
-                    ? null
-                    : (v) => setState(() => _nature = v),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          if (_error != null)
-            Text(_error!, style: const TextStyle(color: Colors.red)),
-
-          const SizedBox(height: 8),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _loading ? null : _save,
-              child: _loading
-                  ? const CircularProgressIndicator()
-                  : const Text('Crear ruta i pujar GPX'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -79,6 +79,9 @@ class _RecommendScreenState extends State<RecommendScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recomanació'),
+        backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
+        elevation: 4,
         actions: [
           IconButton(
             onPressed: () {
@@ -90,99 +93,126 @@ class _RecommendScreenState extends State<RecommendScreen> {
           )
         ],
       ),
-      body: FutureBuilder<List<RouteModel>>(
-        future: _routesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return _ErrorState(
-              message: 'Error carregant rutes',
-              onRetry: () => setState(() => _routesFuture = _routesService.getRoutes()),
-            );
-          }
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.green[50]!, Colors.white],
+          ),
+        ),
+        child: SafeArea(
+          child: FutureBuilder<List<RouteModel>>(
+            future: _routesFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return _ErrorState(
+                  message: 'Error carregant rutes',
+                  onRetry: () => setState(() => _routesFuture = _routesService.getRoutes()),
+                );
+              }
 
-          final routes = snapshot.data ?? [];
-          if (routes.isEmpty) {
-            return const Center(child: Text('No hi ha rutes disponibles'));
-          }
+              final routes = snapshot.data ?? [];
+              if (routes.isEmpty) {
+                return const Center(child: Text('No hi ha rutes disponibles'));
+              }
 
-          // 1) Aplicamos filtros duros
-          final filtered = _applyHardFilters(routes);
+              // 1) Aplicamos filtros duros
+              final filtered = _applyHardFilters(routes);
 
-          // 2) Construimos prefs (por ahora desde filtros)
-          final prefs = _buildPrefsFromFilters();
+              // 2) Construimos prefs (por ahora desde filtros)
+              final prefs = _buildPrefsFromFilters();
 
-          // 3) Recomendamos (scoring)
-          final recommended = _recoService.recommendOne(routes: filtered, prefs: prefs);
+              // 3) Recomendamos (scoring)
+              final recommended = _recoService.recommendOne(routes: filtered, prefs: prefs);
 
-          return ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              _FiltersCard(
-                maxDistance: _maxDistance,
-                fitnessLevel: _fitnessLevel,
-                wantHistory: _wantHistory,
-                wantArchaeology: _wantArchaeology,
-                wantArchitecture: _wantArchitecture,
-                wantNature: _wantNature,
-                onMaxDistanceChanged: (v) {
-                  setState(() => _maxDistance = v);
-                },
-                onFitnessChanged: (v) {
-                  setState(() => _fitnessLevel = v);
-                },
-                onToggleHistory: (v) {
-                  setState(() => _wantHistory = v);
-                },
-                onToggleArchaeology: (v) {
-                  setState(() => _wantArchaeology = v);
-                },
-                onToggleArchitecture: (v) {
-                  setState(() => _wantArchitecture = v);
-                },
-                onToggleNature: (v) {
-                  setState(() => _wantNature = v);
-                },
-              ),
-
-              const SizedBox(height: 14),
-
-              const Text(
-                'Ruta recomanada',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 10),
-
-              if (recommended == null) ...[
-                const Text('No hi ha cap ruta que encaixi amb aquests filtres.'),
-                const SizedBox(height: 10),
-                const Text('Prova a augmentar la distància màxima o desactivar filtres culturals.'),
-              ] else ...[
-                RouteCard(
-                  route: recommended,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => RouteDetailScreen(route: recommended),
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: ListView(
+                  key: ValueKey<String>('$_maxDistance$_fitnessLevel$_wantHistory$_wantArchaeology$_wantArchitecture$_wantNature'),
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    AnimatedOpacity(
+                      opacity: 1.0,
+                      duration: const Duration(milliseconds: 500),
+                      child: _FiltersCard(
+                        maxDistance: _maxDistance,
+                        fitnessLevel: _fitnessLevel,
+                        wantHistory: _wantHistory,
+                        wantArchaeology: _wantArchaeology,
+                        wantArchitecture: _wantArchitecture,
+                        wantNature: _wantNature,
+                        onMaxDistanceChanged: (v) {
+                          setState(() => _maxDistance = v);
+                        },
+                        onFitnessChanged: (v) {
+                          setState(() => _fitnessLevel = v);
+                        },
+                        onToggleHistory: (v) {
+                          setState(() => _wantHistory = v);
+                        },
+                        onToggleArchaeology: (v) {
+                          setState(() => _wantArchaeology = v);
+                        },
+                        onToggleArchitecture: (v) {
+                          setState(() => _wantArchitecture = v);
+                        },
+                        onToggleNature: (v) {
+                          setState(() => _wantNature = v);
+                        },
                       ),
-                    );
-                  },
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    AnimatedOpacity(
+                      opacity: 1.0,
+                      duration: const Duration(milliseconds: 500),
+                      child: const Text(
+                        'Ruta recomanada',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    if (recommended == null) ...[
+                      const Text('No hi ha cap ruta que encaixi amb aquests filtres.', style: TextStyle(fontSize: 16, color: Colors.black87)),
+                      const SizedBox(height: 10),
+                      const Text('Prova a augmentar la distància màxima o desactivar filtres culturals.', style: TextStyle(fontSize: 16, color: Colors.black87)),
+                    ] else ...[
+                      AnimatedOpacity(
+                        opacity: 1.0,
+                        duration: const Duration(milliseconds: 500),
+                        child: RouteCard(
+                          route: recommended,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => RouteDetailScreen(route: recommended),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 18),
+
+                    // Opcional: mostrar cuántas rutas se consideraron
+                    Text(
+                      'Rutes considerades: ${filtered.length} / ${routes.length}',
+                      style: const TextStyle(color: Colors.black87, fontSize: 16),
+                    ),
+                  ],
                 ),
-              ],
-
-              const SizedBox(height: 18),
-
-              // Opcional: mostrar cuántas rutas se consideraron
-              Text(
-                'Rutes considerades: ${filtered.length} / ${routes.length}',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            ],
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -223,75 +253,116 @@ class _FiltersCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Filtres',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.green[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.filter_list, color: Colors.green[700]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Filtres',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.green[800],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
 
-            Text('Distància màxima: ${maxDistance.toStringAsFixed(0)} km'),
-            Slider(
-              value: maxDistance,
-              min: 2,
-              max: 40,
-              divisions: 38,
-              label: maxDistance.toStringAsFixed(0),
-              onChanged: onMaxDistanceChanged,
-            ),
+              Text('Distància màxima: ${maxDistance.toStringAsFixed(0)} km', style: const TextStyle(fontSize: 16)),
+              Slider(
+                value: maxDistance,
+                min: 2,
+                max: 40,
+                divisions: 38,
+                label: maxDistance.toStringAsFixed(0),
+                activeColor: Colors.green[700],
+                onChanged: onMaxDistanceChanged,
+              ),
 
-            const SizedBox(height: 10),
+              const SizedBox(height: 10),
 
-            const Text('Nivell físic'),
-            const SizedBox(height: 6),
-            DropdownButton<String>(
-              value: fitnessLevel,
-              isExpanded: true,
-              items: const [
-                DropdownMenuItem(value: 'bajo', child: Text('Baix')),
-                DropdownMenuItem(value: 'medio', child: Text('Mitjà')),
-                DropdownMenuItem(value: 'alto', child: Text('Alt')),
-              ],
-              onChanged: (v) {
-                if (v != null) onFitnessChanged(v);
-              },
-            ),
-
-            const SizedBox(height: 12),
-
-            const Text('Interès cultural'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilterChip(
-                  label: const Text('Història'),
-                  selected: wantHistory,
-                  onSelected: onToggleHistory,
+              const Text('Nivell físic', style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.green[200]!),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                FilterChip(
-                  label: const Text('Arqueologia'),
-                  selected: wantArchaeology,
-                  onSelected: onToggleArchaeology,
+                child: DropdownButton<String>(
+                  value: fitnessLevel,
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 'bajo', child: Text('Baix', style: TextStyle(fontSize: 16))),
+                    DropdownMenuItem(value: 'medio', child: Text('Mitjà', style: TextStyle(fontSize: 16))),
+                    DropdownMenuItem(value: 'alto', child: Text('Alt', style: TextStyle(fontSize: 16))),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) onFitnessChanged(v);
+                  },
                 ),
-                FilterChip(
-                  label: const Text('Arquitectura'),
-                  selected: wantArchitecture,
-                  onSelected: onToggleArchitecture,
-                ),
-                FilterChip(
-                  label: const Text('Naturalesa'),
-                  selected: wantNature,
-                  onSelected: onToggleNature,
-                ),
-              ],
-            ),
-          ],
+              ),
+
+              const SizedBox(height: 12),
+
+              const Text('Interès cultural', style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Història', style: TextStyle(fontSize: 16)),
+                    selected: wantHistory,
+                    selectedColor: Colors.green[200],
+                    checkmarkColor: Colors.green[800],
+                    onSelected: onToggleHistory,
+                  ),
+                  FilterChip(
+                    label: const Text('Arqueologia', style: TextStyle(fontSize: 16)),
+                    selected: wantArchaeology,
+                    selectedColor: Colors.green[200],
+                    checkmarkColor: Colors.green[800],
+                    onSelected: onToggleArchaeology,
+                  ),
+                  FilterChip(
+                    label: const Text('Arquitectura', style: TextStyle(fontSize: 16)),
+                    selected: wantArchitecture,
+                    selectedColor: Colors.green[200],
+                    checkmarkColor: Colors.green[800],
+                    onSelected: onToggleArchitecture,
+                  ),
+                  FilterChip(
+                    label: const Text('Naturalesa', style: TextStyle(fontSize: 16)),
+                    selected: wantNature,
+                    selectedColor: Colors.green[200],
+                    checkmarkColor: Colors.green[800],
+                    onSelected: onToggleNature,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -312,16 +383,68 @@ class _ErrorState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(message),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: onRetry,
-              child: const Text('Reintentar'),
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.white, Colors.red[50]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error, color: Colors.red[700], size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    style: TextStyle(color: Colors.red[700], fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.red[600]!, Colors.red[800]!],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withAlpha(77),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: onRetry,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Reintentar',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

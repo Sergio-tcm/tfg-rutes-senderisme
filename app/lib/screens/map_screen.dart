@@ -285,69 +285,166 @@ class _MapScreenState extends State<MapScreen> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Chip(
-                    label: Text(_prettyType(item.type)),
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.green[50]!, Colors.white],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  if (item.period != null && item.period!.isNotEmpty)
-                    Chip(
-                      label: Text('Període: ${item.period}'),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.white, Colors.green[50]!],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  if (item.distanceM != null)
-                    Chip(
-                      label: Text(
-                        item.distanceM! >= 1000
-                            ? 'A ${(item.distanceM! / 1000).toStringAsFixed(1)} km'
-                            : 'A ${item.distanceM!.toStringAsFixed(0)} m',
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.place, color: Colors.green[700], size: 24),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  item.title,
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green[900],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              Chip(
+                                label: Text(
+                                  _prettyType(item.type),
+                                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                ),
+                                backgroundColor: Colors.green[600],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              if (item.period != null && item.period!.isNotEmpty)
+                                Chip(
+                                  label: Text(
+                                    'Període: ${item.period}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                  backgroundColor: Colors.blue[600],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              if (item.distanceM != null)
+                                Chip(
+                                  label: Text(
+                                    item.distanceM! >= 1000
+                                        ? 'A ${(item.distanceM! / 1000).toStringAsFixed(1)} km'
+                                        : 'A ${item.distanceM!.toStringAsFixed(0)} m',
+                                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                  backgroundColor: Colors.orange[600],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          Text(
+                            _shortText(item.description),
+                            style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87),
+                          ),
+                        ],
                       ),
                     ),
-                ],
-              ),
+                  ),
+                ),
 
-              const SizedBox(height: 10),
+                const SizedBox(height: 16),
 
-              Text(
-                _shortText(item.description),
-                style: const TextStyle(fontSize: 14),
-              ),
-
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: (item.sourceUrl != null && item.sourceUrl!.isNotEmpty)
-                          ? () => _openUrl(item.sourceUrl!)
-                          : null,
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Fitxa oficial'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.green[600]!, Colors.green[800]!],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.green.withAlpha(77),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: (item.sourceUrl != null && item.sourceUrl!.isNotEmpty)
+                              ? () => _openUrl(item.sourceUrl!)
+                              : null,
+                          icon: const Icon(Icons.open_in_new, color: Colors.white),
+                          label: const Text(
+                            'Fitxa oficial',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Tancar'),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 10),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.green[700],
+                        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      child: const Text('Tancar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -370,6 +467,9 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isRouteMode ? 'Mapa de la ruta' : 'Mapa cultural'),
+        backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
+        elevation: 4,
         actions: [
           if (!isRouteMode)
             PopupMenuButton<int>(
@@ -380,32 +480,43 @@ class _MapScreenState extends State<MapScreen> {
                 _reloadNearItems();
               },
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 500, child: Text('500 m')),
-                PopupMenuItem(value: 1000, child: Text('1 km')),
-                PopupMenuItem(value: 2000, child: Text('2 km')),
-                PopupMenuItem(value: 3000, child: Text('3 km')),
-                PopupMenuItem(value: 5000, child: Text('5 km')),
-                PopupMenuItem(value: 10000, child: Text('10 km')),
+                PopupMenuItem(value: 500, child: Text('500 m', style: TextStyle(fontSize: 16))),
+                PopupMenuItem(value: 1000, child: Text('1 km', style: TextStyle(fontSize: 16))),
+                PopupMenuItem(value: 2000, child: Text('2 km', style: TextStyle(fontSize: 16))),
+                PopupMenuItem(value: 3000, child: Text('3 km', style: TextStyle(fontSize: 16))),
+                PopupMenuItem(value: 5000, child: Text('5 km', style: TextStyle(fontSize: 16))),
+                PopupMenuItem(value: 10000, child: Text('10 km', style: TextStyle(fontSize: 16))),
               ],
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  border: Border.all(color: Theme.of(context).colorScheme.outline),
+                  color: Colors.white,
+                  border: Border.all(color: Colors.green[200]!),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(_radiusM >= 1000 ? '${(_radiusM / 1000).toInt()} km' : '$_radiusM m'),
+                child: Text(
+                  _radiusM >= 1000 ? '${(_radiusM / 1000).toInt()} km' : '$_radiusM m',
+                  style: TextStyle(color: Colors.green[800], fontSize: 16, fontWeight: FontWeight.w500),
+                ),
               ),
             ),
           if (!isRouteMode)
             IconButton(
               tooltip: 'Recarregar (prop)',
-              icon: const Icon(Icons.my_location),
+              icon: const Icon(Icons.my_location, color: Colors.white),
               onPressed: _loadNearMe,
             ),
         ],
       ),
-      body: Stack(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.green[50]!, Colors.white],
+          ),
+        ),
+        child: Stack(
         children: [
           FlutterMap(
             mapController: _mapController,
@@ -430,13 +541,13 @@ class _MapScreenState extends State<MapScreen> {
                       point: _track.first,
                       width: 40,
                       height: 40,
-                      child: const Icon(Icons.flag),
+                      child: const Icon(Icons.flag, color: Colors.green),
                     ),
                     Marker(
                       point: _track.last,
                       width: 40,
                       height: 40,
-                      child: const Icon(Icons.flag_outlined),
+                      child: const Icon(Icons.flag_outlined, color: Colors.red),
                     ),
                   ],
                 ),
@@ -451,10 +562,14 @@ class _MapScreenState extends State<MapScreen> {
                       height: 44,
                       child: GestureDetector(
                         onTap: () => _showCulturalItem(item),
-                        child: Icon(
-                          _iconForType(item.type),
-                          color: _colorForType(item.type),
-                          size: 34,
+                        child: AnimatedOpacity(
+                          opacity: 1.0,
+                          duration: const Duration(milliseconds: 500),
+                          child: Icon(
+                            _iconForType(item.type),
+                            color: _colorForType(item.type),
+                            size: 34,
+                          ),
                         ),
                       ),
                     );
@@ -511,7 +626,7 @@ class _MapScreenState extends State<MapScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: Colors.red),
+                    style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
@@ -525,13 +640,18 @@ class _MapScreenState extends State<MapScreen> {
               child: Material(
                 elevation: 3,
                 borderRadius: BorderRadius.circular(10),
+                color: Colors.white,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  child: Text('${_nearItems.length} punts'),
+                  child: Text(
+                    '${_nearItems.length} punts',
+                    style: TextStyle(color: Colors.green[800], fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
                 ),
               ),
             ),
         ],
+        ),
       ),
     );
   }
