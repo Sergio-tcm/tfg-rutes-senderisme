@@ -32,10 +32,10 @@ def walking_route():
     # 3) OSRM pide coords en orden lon,lat
     coords = f"{start_lon},{start_lat};{end_lon},{end_lat}"
 
-    # 4) Endpoint OSRM: /route/v1/foot/{coords}
+    # 4) Endpoint OSRM: /route/v1/walking/{coords}
     # overview=full -> geometría completa
     # geometries=geojson -> coordenadas como GeoJSON [lon, lat]
-    url = f"{OSRM_BASE_URL}/route/v1/foot/{coords}"
+    url = f"{OSRM_BASE_URL}/route/v1/walking/{coords}"
 
     try:
         r = requests.get(
@@ -43,7 +43,7 @@ def walking_route():
             params={
                 "overview": "full",
                 "geometries": "geojson",
-                "steps": "false",
+                "steps": "true",
             },
             timeout=12,
         )
@@ -61,10 +61,34 @@ def walking_route():
         coords_geo = route["geometry"]["coordinates"]
         polyline = [[float(lat), float(lon)] for lon, lat in coords_geo]  # a [lat,lon]
 
+        # Steps: extract unique road types
+        def classify_road(name):
+            name = name.lower()
+            if any(word in name for word in ['camino', 'sendero', 'camí', 'send', 'track', 'path']):
+                return 'Camino'
+            if any(word in name for word in ['carretera', 'autovia', 'autopista', 'highway', 'road']):
+                return 'Carretera'
+            if any(word in name for word in ['carrer', 'avinguda', 'plaça', 'street', 'avenue', 'square']):
+                return 'Carrer'
+            if any(word in name for word in ['pont', 'bridge']):
+                return 'Pont'
+            return 'Altres' if name else None
+
+        steps = []
+        seen = set()
+        if "legs" in route and route["legs"]:
+            for step in route["legs"][0].get("steps", []):
+                name = step.get("name", "").strip()
+                road_type = classify_road(name)
+                if road_type and road_type not in seen:
+                    steps.append(road_type)
+                    seen.add(road_type)
+
         return jsonify({
             "distance_km": round(distance_m / 1000.0, 2),
             "duration_min": int(round(duration_s / 60.0)),
             "polyline": polyline,
+            "steps": steps,
         }), 200
 
     except requests.Timeout:

@@ -4,6 +4,14 @@
         "/^cd backend ; python -c \"import app; print\\('App imported successfully'\\)\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd backend ; python -c \"from routes\\.routing_routes import routing_bp; print\\('Routing blueprint updated successfully'\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd \\.\\. ; cd backend ; python -c \"from routes\\.routing_routes import routing_bp; print\\('Backend routing updated successfully'\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

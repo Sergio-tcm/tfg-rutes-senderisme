@@ -13,6 +13,7 @@ import '../services/location_service.dart';
 import '../services/route_files_service.dart';
 import '../services/gpx_download_service.dart';
 import '../services/gpx_points_parser.dart';
+import '../services/routing_service.dart';
 
 class MapScreen extends StatefulWidget {
   final int? routeId;
@@ -34,6 +35,7 @@ class _MapScreenState extends State<MapScreen> {
   // Near me cultural
   final _locationService = LocationService();
   final _culturalNearService = CulturalNearService();
+  final _routingService = RoutingService();
 
   bool _loading = false;
   String? _error;
@@ -41,6 +43,15 @@ class _MapScreenState extends State<MapScreen> {
   List<LatLng> _track = const [];
   List<CulturalItem> _nearItems = const [];
   LatLng? _currentPosition;
+
+  // Walking route
+  List<LatLng> _walkingTrack = const [];
+  double? _walkingDistanceKm;
+  int? _walkingDurationMin;
+  bool _routingLoading = false;
+  String? _routingError;
+  CulturalItem? _currentDestination;
+  List<String> _walkingSteps = const [];
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -281,6 +292,50 @@ class _MapScreenState extends State<MapScreen> {
     _mapController.move(_currentPosition!, zoom.clamp(1.0, 18.0));
   }
 
+  Future<void> _routeToPoi(CulturalItem item) async {
+    setState(() {
+      _routingLoading = true;
+      _routingError = null;
+    });
+
+    try {
+      final pos = await _locationService.getCurrentPosition();
+
+      final result = await _routingService.walkingRoute(
+        startLat: pos.latitude,
+        startLon: pos.longitude,
+        endLat: item.latitude,
+        endLon: item.longitude,
+      );
+
+      final pts = result.polyline
+          .map((p) => LatLng(p[0], p[1]))
+          .toList();
+
+      setState(() {
+        _walkingTrack = pts;
+        _walkingDistanceKm = result.distanceKm;
+        _walkingDurationMin = result.durationMin;
+        _currentDestination = item;
+        _walkingSteps = result.steps;
+      });
+
+      // Opcional: encuadrar la ruta en pantalla
+      if (pts.length >= 2) {
+        final bounds = LatLngBounds.fromPoints(pts);
+        _mapController.fitCamera(
+          CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _routingError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      setState(() => _routingLoading = false);
+    }
+  }
+
   void _showCulturalItem(CulturalItem item) {
     showModalBottomSheet(
       context: context,
@@ -433,6 +488,25 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: _routingLoading ? null : () async {
+                        Navigator.pop(context); // cerrar sheet
+                        await _routeToPoi(item);
+                      },
+                      icon: const Icon(Icons.directions_walk, color: Colors.white),
+                      label: const Text(
+                        'Ruta fins aquí',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       style: TextButton.styleFrom(
@@ -443,6 +517,12 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ],
                 ),
+
+                if (_routingError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_routingError!, style: const TextStyle(color: Colors.red, fontSize: 16)),
+                  ),
               ],
             ),
           ),
@@ -533,6 +613,17 @@ class _MapScreenState extends State<MapScreen> {
 
               if (_track.isNotEmpty) PolylineLayer(polylines: polylines),
 
+              if (_walkingTrack.isNotEmpty)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _walkingTrack,
+                      strokeWidth: 5,
+                      color: Colors.blue,
+                    ),
+                  ],
+                ),
+
               // markers inicio/fin si hay track
               if (_track.isNotEmpty)
                 MarkerLayer(
@@ -555,7 +646,7 @@ class _MapScreenState extends State<MapScreen> {
               // markers culturales (modo global)
               if (!isRouteMode && _nearItems.isNotEmpty)
                 MarkerLayer(
-                  markers: _nearItems.map((item) {
+                  markers: _nearItems.where((item) => _walkingTrack.isEmpty || item == _currentDestination).map((item) {
                     return Marker(
                       point: LatLng(item.latitude, item.longitude),
                       width: 44,
@@ -627,6 +718,57 @@ class _MapScreenState extends State<MapScreen> {
                   child: Text(
                     _error!,
                     style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ),
+
+          if (_walkingDistanceKm != null && _walkingDurationMin != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 12,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Ruta: ${_walkingDistanceKm!.toStringAsFixed(2)} km · ${_walkingDurationMin!} min',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _walkingTrack = const [];
+                                _walkingDistanceKm = null;
+                                _walkingDurationMin = null;
+                                _routingError = null;
+                                _currentDestination = null;
+                                _walkingSteps = const [];
+                              });
+                            },
+                            child: const Text('Netejar'),
+                          ),
+                        ],
+                      ),
+                      if (_walkingSteps.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Vies: ${_walkingSteps.join(", ")}',
+                            style: const TextStyle(fontSize: 14, color: Colors.black87),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
