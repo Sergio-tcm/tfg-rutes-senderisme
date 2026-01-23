@@ -10,6 +10,8 @@ from routes.routes_routes import routes_bp, cultural_bp
 
 from routes.route_files_routes import route_files_bp
 
+from routes.routing_routes import routing_bp
+
 
 load_dotenv()
 
@@ -31,6 +33,7 @@ def home():
 app.register_blueprint(auth_bp)
 app.register_blueprint(routes_bp)
 app.register_blueprint(cultural_bp)
+app.register_blueprint(routing_bp)
 
 
 if __name__ == "__main__":

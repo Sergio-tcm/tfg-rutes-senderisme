@@ -1,3 +1,9 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "chat.tools.terminal.autoApprove": {
+        "/^cd backend ; python -c \"import app; print\\('App imported successfully'\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }
