@@ -163,30 +163,90 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   // ---------- UI helpers ----------
-  IconData _iconForType(String type) {
+  String _getCategory(String type) {
     final t = type.toLowerCase();
-    if (t.contains('archaeo') || t.contains('arqueo')) return Icons.museum;
-    if (t.contains('architec') || t.contains('arquitec')) return Icons.account_balance;
-    if (t.contains('hist')) return Icons.history_edu;
-    if (t.contains('natur')) return Icons.park;
-    return Icons.place;
+    if (t.contains('conjunt arquitectònic') || t.contains('edifici') || t.contains('element arquitectònic') || t.contains('element urbà') || t.contains('obra civil')) {
+      return 'arquitectura';
+    }
+    if (t.contains('jaciment arqueològic') || t.contains('jaciment paleontològic')) {
+      return 'arqueologia';
+    }
+    if (t.contains('espècimen botànic') || t.contains('zona d\'interès')) {
+      return 'natural';
+    }
+    if (t.contains('costumari') || t.contains('manifestació festiva') || t.contains('música i dansa') || t.contains('tradició oral') || t.contains('tècnica artesanal')) {
+      return 'cultural';
+    }
+    if (t.contains('fons bibliogràfic') || t.contains('fons d\'imatges') || t.contains('fons documental')) {
+      return 'documental';
+    }
+    if (t.contains('col·lecció') || t.contains('objecte')) {
+      return 'objectes';
+    }
+    return 'altres';
+  }
+
+  IconData _iconForType(String type) {
+    final category = _getCategory(type);
+    switch (category) {
+      case 'arquitectura':
+        return Icons.account_balance;
+      case 'arqueologia':
+        return Icons.museum;
+      case 'natural':
+        return Icons.park;
+      case 'cultural':
+        return Icons.celebration;
+      case 'documental':
+        return Icons.library_books;
+      case 'objectes':
+        return Icons.inventory;
+      default:
+        return Icons.place;
+    }
   }
 
   Color _colorForType(String type) {
-    final t = type.toLowerCase();
-    if (t.contains('archaeo') || t.contains('arqueo')) return Colors.brown;
-    if (t.contains('architec') || t.contains('arquitec')) return Colors.deepPurple;
-    if (t.contains('hist')) return Colors.indigo;
-    if (t.contains('natur')) return Colors.green;
-    return Colors.red;
+    final category = _getCategory(type);
+    switch (category) {
+      case 'arquitectura':
+        return Colors.blueGrey;
+      case 'arqueologia':
+        return Colors.brown;
+      case 'natural':
+        return Colors.green;
+      case 'cultural':
+        return Colors.orange;
+      case 'documental':
+        return Colors.teal;
+      case 'objectes':
+        return Colors.indigo;
+      default:
+        return Colors.red;
+    }
   }
 
   String _prettyType(String type) {
     final t = type.toLowerCase();
-    if (t == 'architecture') return 'Arquitectura';
-    if (t == 'archaeology') return 'Arqueologia';
-    if (t == 'historical') return 'Històric';
-    if (t == 'natural') return 'Naturalesa';
+    if (t == 'conjunt arquitectònic') return 'Conjunt arquitectònic';
+    if (t == 'edifici') return 'Edifici';
+    if (t == 'element arquitectònic') return 'Element arquitectònic';
+    if (t == 'element urbà') return 'Element urbà';
+    if (t == 'obra civil') return 'Obra civil';
+    if (t == 'jaciment arqueològic') return 'Jaciment arqueològic';
+    if (t == 'jaciment paleontològic') return 'Jaciment paleontològic';
+    if (t == 'espècimen botànic') return 'Espècimen botànic';
+    if (t == 'zona d\'interès') return 'Zona d\'interès';
+    if (t == 'costumari') return 'Costumari';
+    if (t == 'manifestació festiva') return 'Manifestació festiva';
+    if (t == 'música i dansa') return 'Música i dansa';
+    if (t == 'tradició oral') return 'Tradició oral';
+    if (t == 'tècnica artesanal') return 'Tècnica artesanal';
+    if (t == 'fons bibliogràfic') return 'Fons bibliogràfic';
+    if (t == 'fons d\'imatges') return 'Fons d\'imatges';
+    if (t == 'fons documental') return 'Fons documental';
+    if (t == 'col·lecció') return 'Col·lecció';
+    if (t == 'objecte') return 'Objecte';
     return 'Altres';
   }
 
