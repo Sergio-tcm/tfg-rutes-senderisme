@@ -9,23 +9,37 @@ route_cultural_bp = Blueprint("route_cultural", __name__, url_prefix="/routes")
 
 def _get_gpx_url_for_route(conn, route_id: int):
     with conn.cursor() as cur:
-        cur.execute("""
-            select file_url, file_type
-            from route_files
-            where route_id = %s
-            order by file_id asc
-        """, (route_id,))
-        files = cur.fetchall()
+        # Probamos primero file_path (tu esquema original)
+        try:
+            cur.execute("""
+                select file_path, file_type
+                from route_files
+                where route_id = %s
+                order by file_id asc
+            """, (route_id,))
+            files = cur.fetchall()
+            col_is_path = True
+        except Exception:
+            # fallback si en tu proyecto se llama file_url
+            conn.rollback()
+            cur.execute("""
+                select file_url, file_type
+                from route_files
+                where route_id = %s
+                order by file_id asc
+            """, (route_id,))
+            files = cur.fetchall()
+            col_is_path = False
 
     if not files:
         return None
 
-    # buscamos GPX primero
-    for file_url, file_type in files:
+    for file_val, file_type in files:
         if str(file_type).upper() == "GPX":
-            return file_url
-    # fallback primer fichero
+            return file_val
+
     return files[0][0]
+
 
 @route_cultural_bp.post("/<int:route_id>/cultural-items/recompute")
 def recompute_route_cultural_items(route_id: int):
