@@ -1,9 +1,9 @@
 import requests
 from flask import Blueprint, jsonify, request
-from backend.db import get_connection  # ajusta si tu import es distinto
 
-from backend.services.gpx_parser import parse_gpx_points
-from backend.services.geo_utils import haversine_m, bbox_for_radius
+from db import get_connection
+from services.gpx_parser import parse_gpx_points
+from services.geo_utils import haversine_m, bbox_for_radius
 
 route_cultural_bp = Blueprint("route_cultural", __name__, url_prefix="/routes")
 

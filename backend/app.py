@@ -12,7 +12,7 @@ from routes.route_files_routes import route_files_bp
 
 from routes.routing_routes import routing_bp
 
-from backend.routes.route_cultural_routes import route_cultural_bp
+from routes.route_cultural_routes import route_cultural_bp
 
 
 load_dotenv()
