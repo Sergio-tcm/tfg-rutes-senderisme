@@ -20,6 +20,112 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkExistingSession();
+  }
+
+  Future<void> _checkExistingSession() async {
+    final token = await TokenStorage.getToken();
+    if (token != null && token.isNotEmpty && mounted) {
+      // Hay token guardado, intentar validarlo
+      _showAutoLoginDialog();
+    }
+  }
+
+  void _showAutoLoginDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Center(
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.5, end: 1.0).animate(
+              CurvedAnimation(
+                parent: ModalRoute.of(context)!.animation!,
+                curve: Curves.elasticOut,
+              ),
+            ),
+            child: FadeTransition(
+              opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+                CurvedAnimation(
+                  parent: ModalRoute.of(context)!.animation!,
+                  curve: Curves.easeIn,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(51),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.green[700]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Iniciant sessió...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green[800],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Espera un moment',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Intentar validar el token
+    _validateAndNavigate();
+  }
+
+  Future<void> _validateAndNavigate() async {
+    try {
+      await _auth.me();
+      // Token válido, navegar a home
+      if (mounted) {
+        Navigator.pop(context); // Cerrar el dialog
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
+    } catch (e) {
+      // Token inválido o expirado
+      if (mounted) {
+        Navigator.pop(context); // Cerrar dialog
+        setState(() {
+          _error = 'Sessió expirada. Si us plau, inicia sessió de nou.';
+        });
+        // Limpiar token
+        await TokenStorage.deleteToken();
+      }
+    }
+  }
+
   Future<void> _login() async {
     setState(() {
       _loading = true;
@@ -35,10 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await TokenStorage.saveToken(token);
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      _showAutoLoginDialog();
     } catch (e) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
