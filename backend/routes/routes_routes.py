@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from db import get_connection
 import math
 from utils.geo import haversine_m
+from services.difficulty_calculator import calculate_difficulty
 
 routes_bp = Blueprint("routes", __name__, url_prefix="/routes")
 
@@ -29,15 +30,26 @@ def get_routes():
 
     routes = []
     for r in rows:
+        distance_km = float(r[3] or 0)
+        elevation_gain = int(r[5] or 0)
+        estimated_time = r[7] or ""
+        difficulty_stored = r[4] or ""
+        
+        # Calculate difficulty dynamically if not set or invalid
+        if not difficulty_stored or difficulty_stored.strip() == "":
+            difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time)
+        else:
+            difficulty = difficulty_stored
+        
         routes.append({
             "route_id": r[0],
             "name": r[1],
             "description": r[2] or "",
-            "distance_km": float(r[3] or 0),
-            "difficulty": r[4] or "",
-            "elevation_gain": int(r[5] or 0),
+            "distance_km": distance_km,
+            "difficulty": difficulty,
+            "elevation_gain": elevation_gain,
             "location": r[6] or "",
-            "estimated_time": r[7] or "",
+            "estimated_time": estimated_time,
             "creator_id": int(r[8]),
             "cultural_summary": r[9] or "",
             "has_historical_value": bool(r[10]),
@@ -62,10 +74,16 @@ def create_route():
 
     description = data.get("description") or ""
     distance_km = data.get("distance_km")
-    difficulty = data.get("difficulty") or ""
+    difficulty_input = data.get("difficulty") or ""
     elevation_gain = data.get("elevation_gain")
     location = data.get("location") or ""
     estimated_time = data.get("estimated_time") or ""
+
+    # Calculate difficulty if not provided or invalid
+    if not difficulty_input or difficulty_input.strip() == "":
+        difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time)
+    else:
+        difficulty = difficulty_input
 
     cultural_summary = data.get("cultural_summary") or ""
     has_historical_value = bool(data.get("has_historical_value", False))
@@ -100,16 +118,27 @@ def create_route():
     conn.commit()
     cur.close()
     conn.close()
+    
+    # Recalculate difficulty for the response in case database stored empty
+    response_distance = float(r[3] or 0)
+    response_elevation = int(r[5] or 0)
+    response_time = r[7] or ""
+    response_difficulty_stored = r[4] or ""
+    
+    if not response_difficulty_stored or response_difficulty_stored.strip() == "":
+        response_difficulty = calculate_difficulty(response_distance, response_elevation, response_time)
+    else:
+        response_difficulty = response_difficulty_stored
 
     return jsonify({
         "route_id": r[0],
         "name": r[1],
         "description": r[2] or "",
-        "distance_km": float(r[3] or 0),
-        "difficulty": r[4] or "",
-        "elevation_gain": int(r[5] or 0),
+        "distance_km": response_distance,
+        "difficulty": response_difficulty,
+        "elevation_gain": response_elevation,
         "location": r[6] or "",
-        "estimated_time": r[7] or "",
+        "estimated_time": response_time,
         "creator_id": int(r[8]),
         "cultural_summary": r[9] or "",
         "has_historical_value": bool(r[10]),

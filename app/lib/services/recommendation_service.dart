@@ -99,19 +99,27 @@ class RecommendationService {
 
   Set<String> _allowedDifficultiesForFitness(String fitnessLevel) {
     // Normalizamos nombres típicos
-    // (si en tu app usas 'Fàcil/Mitjana/Difícil', mejor mantenerlo así en BD)
+    // (si en tu app usas 'Fàcil/Mitjana/Difícil/Muy Difícil', mejor mantenerlo así en BD)
     switch (fitnessLevel) {
       case 'baix':
       case 'bajo':
       case 'low':
-        return {'fàcil', 'facil', 'fácil'};
+        return {'fàcil', 'facil', 'fácil', 'easy'};
       case 'alt':
       case 'alto':
       case 'high':
-        return {'fàcil', 'facil', 'fácil', 'mitjana', 'media', 'difícil', 'dificil'};
+        return {
+          'fàcil', 'facil', 'fácil', 'easy',
+          'mitjana', 'media', 'moderate',
+          'difícil', 'dificil', 'difficult',
+          'muy difícil', 'muy dificil', 'very difficult'
+        };
       default:
         // medio
-        return {'fàcil', 'facil', 'fácil', 'mitjana', 'media'};
+        return {
+          'fàcil', 'facil', 'fácil', 'easy',
+          'mitjana', 'media', 'moderate'
+        };
     }
   }
 }

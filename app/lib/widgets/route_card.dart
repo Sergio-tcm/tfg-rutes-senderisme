@@ -170,22 +170,24 @@ class _DifficultyBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     Color bgColor;
     Color textColor;
-    switch (difficulty.toLowerCase()) {
-      case 'fàcil':
-        bgColor = Colors.green[100]!;
-        textColor = Colors.green[800]!;
-        break;
-      case 'mitjana':
-        bgColor = Colors.orange[100]!;
-        textColor = Colors.orange[800]!;
-        break;
-      case 'difícil':
-        bgColor = Colors.red[100]!;
-        textColor = Colors.red[800]!;
-        break;
-      default:
-        bgColor = Colors.grey[100]!;
-        textColor = Colors.grey[800]!;
+    final diff = difficulty.toLowerCase().trim();
+    
+    if (diff.contains('fàcil') || diff.contains('facil') || diff == 'easy') {
+      bgColor = Colors.green[100]!;
+      textColor = Colors.green[800]!;
+    } else if (diff.contains('mitjana') || diff.contains('media') || diff == 'moderate') {
+      bgColor = Colors.orange[100]!;
+      textColor = Colors.orange[800]!;
+    } else if (diff.contains('difícil') && diff.contains('muy')) {
+      // Muy Difícil
+      bgColor = Colors.red[200]!;
+      textColor = Colors.red[900]!;
+    } else if (diff.contains('difícil') || diff.contains('dificil') || diff == 'difficult') {
+      bgColor = Colors.red[100]!;
+      textColor = Colors.red[800]!;
+    } else {
+      bgColor = Colors.grey[100]!;
+      textColor = Colors.grey[800]!;
     }
 
     return Container(
