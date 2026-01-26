@@ -18,10 +18,9 @@ class _RecommendScreenState extends State<RecommendScreen> {
   final _routesService = RoutesService();
   final _recoService = RecommendationService();
 
-  // Filtros UI (definitivos)
-  double _maxDistance = 15.0;
+  // Filtres UI
+  double _preferredDistance = 15.0; // Distància objectiu
   String _maxDifficulty = 'Molt Difícil'; // Filtrem per dificultat màxima permesa
-  String _fitnessLevel = 'medio'; // bajo/medio/alto
   bool _wantHistory = false;
   bool _wantArchaeology = false;
   bool _wantArchitecture = false;
@@ -47,8 +46,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
     return UserPreferencesModel(
       prefId: 0,
       userId: 0,
-      fitnessLevel: _fitnessLevel,
-      preferredDistance: _maxDistance,
+      preferredDistance: _preferredDistance,
       environmentType: null,
       culturalInterest: interests.join(','),
       updatedAt: null,
@@ -62,12 +60,9 @@ class _RecommendScreenState extends State<RecommendScreen> {
   }
 
   List<RouteModel> _applyHardFilters(List<RouteModel> routes) {
-    // Filtro duro por distancia máxima
-    final filteredByDistance = routes.where((r) => r.distanceKm <= _maxDistance).toList();
-
-    // Filtro por dificultad máxima seleccionada
+    // Filtro duro por dificultat màxima seleccionada
     final maxRank = _difficultyRank(_maxDifficulty);
-    final filteredByDifficulty = filteredByDistance.where((r) {
+    final filteredByDifficulty = routes.where((r) {
       final rank = _difficultyRank(r.difficulty);
       return rank <= maxRank;
     }).toList();
@@ -149,30 +144,31 @@ class _RecommendScreenState extends State<RecommendScreen> {
               final prefs = _buildPrefsFromFilters();
 
               // 3) Recomendamos (scoring)
-              final recommended = _recoService.recommendOne(routes: filtered, prefs: prefs);
+              final ranked = _recoService.rankRoutes(
+                routes: filtered,
+                prefs: prefs,
+                maxDifficultyRank: _difficultyRank(_maxDifficulty),
+              );
+              final recommended = ranked.isEmpty ? null : ranked.first;
 
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 child: ListView(
-                  key: ValueKey<String>('$_maxDistance$_maxDifficulty$_fitnessLevel$_wantHistory$_wantArchaeology$_wantArchitecture$_wantNature'),
+                  key: ValueKey<String>('$_preferredDistance$_maxDifficulty$_wantHistory$_wantArchaeology$_wantArchitecture$_wantNature'),
                   padding: const EdgeInsets.all(12),
                   children: [
                     AnimatedOpacity(
                       opacity: 1.0,
                       duration: const Duration(milliseconds: 500),
                       child: _FiltersCard(
-                        maxDistance: _maxDistance,
-                        fitnessLevel: _fitnessLevel,
+                        preferredDistance: _preferredDistance,
                         wantHistory: _wantHistory,
                         maxDifficulty: _maxDifficulty,
                         wantArchaeology: _wantArchaeology,
                         wantArchitecture: _wantArchitecture,
                         wantNature: _wantNature,
-                        onMaxDistanceChanged: (v) {
-                          setState(() => _maxDistance = v);
-                        },
-                        onFitnessChanged: (v) {
-                          setState(() => _fitnessLevel = v);
+                        onPreferredDistanceChanged: (v) {
+                          setState(() => _preferredDistance = v);
                         },
                         onDifficultyChanged: (v) {
                           setState(() => _maxDifficulty = v);
@@ -208,7 +204,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
                     if (recommended == null) ...[
                       const Text('No hi ha cap ruta que encaixi amb aquests filtres.', style: TextStyle(fontSize: 16, color: Colors.black87)),
                       const SizedBox(height: 10),
-                      const Text('Prova a augmentar la distància màxima o desactivar filtres culturals.', style: TextStyle(fontSize: 16, color: Colors.black87)),
+                      const Text('Prova a baixar la dificultat màxima o desactivar filtres culturals.', style: TextStyle(fontSize: 16, color: Colors.black87)),
                     ] else ...[
                       AnimatedOpacity(
                         opacity: 1.0,
@@ -229,6 +225,32 @@ class _RecommendScreenState extends State<RecommendScreen> {
 
                     const SizedBox(height: 18),
 
+                    // Llista curta amb altres suggeriments
+                    if (ranked.length > 1) ...[
+                      const Text(
+                        'Altres rutes recomanades',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 10),
+                      ...ranked.skip(1).take(3).map(
+                        (route) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: RouteCard(
+                            route: route,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => RouteDetailScreen(route: route),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     // Opcional: mostrar cuántas rutas se consideraron
                     Text(
                       'Rutes considerades: ${filtered.length} / ${routes.length}',
@@ -246,18 +268,16 @@ class _RecommendScreenState extends State<RecommendScreen> {
 }
 
 class _FiltersCard extends StatelessWidget {
-  final double maxDistance;
+  final double preferredDistance;
   final String maxDifficulty;
-  final String fitnessLevel;
 
   final bool wantHistory;
   final bool wantArchaeology;
   final bool wantArchitecture;
   final bool wantNature;
 
-  final ValueChanged<double> onMaxDistanceChanged;
+  final ValueChanged<double> onPreferredDistanceChanged;
   final ValueChanged<String> onDifficultyChanged;
-  final ValueChanged<String> onFitnessChanged;
 
   final ValueChanged<bool> onToggleHistory;
   final ValueChanged<bool> onToggleArchaeology;
@@ -265,16 +285,14 @@ class _FiltersCard extends StatelessWidget {
   final ValueChanged<bool> onToggleNature;
 
   const _FiltersCard({
-    required this.maxDistance,
+    required this.preferredDistance,
     required this.maxDifficulty,
-    required this.fitnessLevel,
     required this.wantHistory,
     required this.wantArchaeology,
     required this.wantArchitecture,
     required this.wantNature,
-    required this.onMaxDistanceChanged,
+    required this.onPreferredDistanceChanged,
     required this.onDifficultyChanged,
-    required this.onFitnessChanged,
     required this.onToggleHistory,
     required this.onToggleArchaeology,
     required this.onToggleArchitecture,
@@ -318,15 +336,15 @@ class _FiltersCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
 
-              Text('Distància màxima: ${maxDistance.toStringAsFixed(0)} km', style: const TextStyle(fontSize: 16)),
+              Text('Distancia objectiu: ${preferredDistance.toStringAsFixed(0)} km (preferida)', style: const TextStyle(fontSize: 16)),
               Slider(
-                value: maxDistance,
+                value: preferredDistance,
                 min: 2,
                 max: 40,
                 divisions: 38,
-                label: maxDistance.toStringAsFixed(0),
+                label: preferredDistance.toStringAsFixed(0),
                 activeColor: Colors.green[700],
-                onChanged: onMaxDistanceChanged,
+                onChanged: onPreferredDistanceChanged,
               ),
 
               const SizedBox(height: 10),
@@ -351,31 +369,6 @@ class _FiltersCard extends StatelessWidget {
                   ],
                   onChanged: (v) {
                     if (v != null) onDifficultyChanged(v);
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              const Text('Nivell físic', style: TextStyle(fontSize: 16)),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.green[200]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: DropdownButton<String>(
-                  value: fitnessLevel,
-                  isExpanded: true,
-                  underline: const SizedBox(),
-                  items: const [
-                    DropdownMenuItem(value: 'bajo', child: Text('Baix', style: TextStyle(fontSize: 16))),
-                    DropdownMenuItem(value: 'medio', child: Text('Mitjà', style: TextStyle(fontSize: 16))),
-                    DropdownMenuItem(value: 'alto', child: Text('Alt', style: TextStyle(fontSize: 16))),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) onFitnessChanged(v);
                   },
                 ),
               ),

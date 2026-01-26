@@ -87,6 +87,10 @@ class _RoutesScreenState extends State<RoutesScreen> {
                             value: 'Difícil',
                             child: Text('Difícil'),
                           ),
+                          DropdownMenuItem(
+                            value: 'Molt Difícil',
+                            child: Text('Molt Difícil'),
+                          ),
                         ],
                         onChanged: (value) {
                           if (value != null) {
