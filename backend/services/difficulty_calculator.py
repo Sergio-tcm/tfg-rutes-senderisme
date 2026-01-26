@@ -42,10 +42,10 @@ def calculate_difficulty(distance_km: float, elevation_gain: int, estimated_time
     if estimated_time:
         time_minutes = _parse_time_to_minutes(estimated_time)
     
-    # Calculate hiking difficulty score using Tobler's hiking function
-    # Modified formula: Difficulty Score = Distance + (Elevation Gain / 100)
-    # This is a common formula used in hiking apps
-    difficulty_score = distance_km + (elevation_gain / 100)
+    # Calculate hiking difficulty score using a weighted formula
+    # Gives más peso al desnivel y amplía la separación entre niveles
+    # Score = distance_km * 1.2 + (elevation_gain / 80)
+    difficulty_score = (distance_km * 1.2) + (elevation_gain / 80)
     
     # Alternative: If we have time estimate, use it to validate/refine the score
     # Average hiking speed: ~4 km/h on flat terrain
@@ -62,17 +62,16 @@ def calculate_difficulty(distance_km: float, elevation_gain: int, estimated_time
             if time_ratio > 1.2:
                 difficulty_score *= time_ratio * 0.3  # Apply small adjustment
     
-    # Classify based on standard hiking difficulty scales
-    # These thresholds are standard in European hiking
-    if difficulty_score < 5:
+    # Classify with adjusted thresholds to widen distribution
+    if difficulty_score < 7:
         if lang == 'ca':
             return "Fàcil"
         return "Fácil"
-    elif difficulty_score < 15:
+    elif difficulty_score < 17:
         if lang == 'ca':
             return "Mitjana"
         return "Moderada"
-    elif difficulty_score < 30:
+    elif difficulty_score < 27:
         return "Difícil"
     else:
         if lang == 'ca':
@@ -149,4 +148,4 @@ def get_difficulty_score(distance_km: float, elevation_gain: int) -> float:
     if elevation_gain is None or elevation_gain < 0:
         elevation_gain = 0
     
-    return distance_km + (elevation_gain / 100)
+    return (distance_km * 1.2) + (elevation_gain / 80)

@@ -17,7 +17,7 @@ Se ha implementado un sistema inteligente de cálculo de dificultad para rutas d
 Módulo principal con las funciones de cálculo:
 
 - `calculate_difficulty(distance_km, elevation_gain, estimated_time)` → `str`
-  - Calcula el nivel de dificultad de una ruta
+  - Calcula el nivel de dificultad de una ruta con fórmula ponderada
   - Retorna: "Fácil", "Moderada", "Difícil", "Muy Difícil"
 
 - `get_difficulty_score(distance_km, elevation_gain)` → `float`
@@ -45,18 +45,18 @@ Badges actualizados con colores para "Muy Difícil":
 
 ## Fórmula de Cálculo
 
-### Score Base
+### Score Base (ajustada)
 ```
-Score = Distancia(km) + (Elevación(m) / 100)
+Score = Distancia(km) * 1.2 + (Elevación(m) / 80)
 ```
 
-### Escala de Clasificación
+### Escala de Clasificación (ajustada para mayor dispersión)
 | Score | Dificultad | Descripción |
 |-------|-----------|-----------|
-| < 5 | Fácil | Apta para todos |
-| 5-15 | Moderada | Requiere cierta forma física |
-| 15-30 | Difícil | Requiere buena forma física |
-| ≥ 30 | Muy Difícil | Solo para expertos |
+| < 7 | Fácil | Apta para todos |
+| 7-17 | Moderada | Requiere cierta forma física |
+| 17-27 | Difícil | Requiere buena forma física |
+| ≥ 27 | Muy Difícil | Solo para expertos |
 
 ### Ajuste por Tiempo (Opcional)
 Si se proporciona `estimated_time`, se valida que sea consistente con la distancia y elevación. Si la ruta toma significativamente más tiempo de lo esperado, se aumenta ligeramente la dificultad.
@@ -78,11 +78,11 @@ Si se proporciona `estimated_time`, se valida que sea consistente con la distanc
 
 | Ruta | Distancia | Elevación | Dificultad | Score |
 |------|-----------|-----------|-----------|-------|
-| Paseo urbano | 3 km | 50 m | Fácil | 3.5 |
-| Sendero local | 5 km | 100 m | Moderada | 6.0 |
-| Excursión diaria | 10 km | 300 m | Moderada | 13.0 |
-| Montaña media | 15 km | 600 m | Difícil | 21.0 |
-| Ruta alpina | 25 km | 1200 m | Muy Difícil | 37.0 |
+| Paseo urbà | 3 km | 50 m | Fácil | 3.6 |
+| Sender local | 5 km | 100 m | Moderada | 7.3 |
+| Excursió diària | 10 km | 300 m | Moderada | 15.8 |
+| Muntanya mitjana | 15 km | 600 m | Difícil | 25.5 |
+| Ruta alpina | 25 km | 1200 m | Muy Difícil | 44.0 |
 
 ## Testing
 

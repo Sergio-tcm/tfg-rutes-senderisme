@@ -63,12 +63,12 @@ def get_routes():
         estimated_time = r[7] or ""
         difficulty_stored = r[4] or ""
         
-        # Calculate difficulty dynamically if not set or invalid
-        if not difficulty_stored or difficulty_stored.strip() == "":
-            difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
-        else:
-            # Normalize existing difficulty to ensure consistency
-            difficulty = normalize_difficulty(difficulty_stored)
+        # Always calculate difficulty with the latest formula to avoid stale DB values
+        computed_difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
+        stored_normalized = normalize_difficulty(difficulty_stored)
+
+        # Prefer computed difficulty to reclassify legacy "fàcil" entries
+        difficulty = computed_difficulty or stored_normalized
         
         routes.append({
             "route_id": r[0],
@@ -109,11 +109,8 @@ def create_route():
     estimated_time = data.get("estimated_time") or ""
 
     # Calculate difficulty if not provided or invalid
-    if not difficulty_input or difficulty_input.strip() == "":
-        difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
-    else:
-        # Normalize the input difficulty
-        difficulty = normalize_difficulty(difficulty_input)
+    # We compute difficulty with the unified formula regardless of input, to keep consistency
+    difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
 
     cultural_summary = data.get("cultural_summary") or ""
     has_historical_value = bool(data.get("has_historical_value", False))
@@ -155,10 +152,8 @@ def create_route():
     response_time = r[7] or ""
     response_difficulty_stored = r[4] or ""
     
-    if not response_difficulty_stored or response_difficulty_stored.strip() == "":
-        response_difficulty = calculate_difficulty(response_distance, response_elevation, response_time, lang='ca')
-    else:
-        response_difficulty = normalize_difficulty(response_difficulty_stored)
+    # Always return the fresh computed difficulty to ensure consistency for new routes
+    response_difficulty = calculate_difficulty(response_distance, response_elevation, response_time, lang='ca')
 
     return jsonify({
         "route_id": r[0],

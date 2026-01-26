@@ -20,6 +20,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
 
   // Filtros UI (definitivos)
   double _maxDistance = 15.0;
+  String _maxDifficulty = 'Molt Difícil'; // Filtrem per dificultat màxima permesa
   String _fitnessLevel = 'medio'; // bajo/medio/alto
   bool _wantHistory = false;
   bool _wantArchaeology = false;
@@ -54,17 +55,30 @@ class _RecommendScreenState extends State<RecommendScreen> {
     );
   }
 
+  void _loadRecommendations() {
+    setState(() {
+      _routesFuture = _routesService.getRoutes();
+    });
+  }
+
   List<RouteModel> _applyHardFilters(List<RouteModel> routes) {
     // Filtro duro por distancia máxima
     final filteredByDistance = routes.where((r) => r.distanceKm <= _maxDistance).toList();
+
+    // Filtro por dificultad máxima seleccionada
+    final maxRank = _difficultyRank(_maxDifficulty);
+    final filteredByDifficulty = filteredByDistance.where((r) {
+      final rank = _difficultyRank(r.difficulty);
+      return rank <= maxRank;
+    }).toList();
 
     // Filtro cultural duro si el usuario activa chips
     // Si no activa ninguno, no filtramos por cultura.
     final wantsAnyCulture = _wantHistory || _wantArchaeology || _wantArchitecture || _wantNature;
 
-    if (!wantsAnyCulture) return filteredByDistance;
+    if (!wantsAnyCulture) return filteredByDifficulty;
 
-    return filteredByDistance.where((r) {
+    return filteredByDifficulty.where((r) {
       bool ok = false;
       if (_wantHistory && r.hasHistoricalValue) ok = true;
       if (_wantArchaeology && r.hasArchaeology) ok = true;
@@ -72,6 +86,14 @@ class _RecommendScreenState extends State<RecommendScreen> {
       if (_wantNature && r.hasNaturalInterest) ok = true;
       return ok;
     }).toList();
+  }
+
+  int _difficultyRank(String difficulty) {
+    final d = difficulty.toLowerCase().trim();
+    if (d.contains('molt') || d.contains('muy')) return 3;
+    if (d.contains('difícil') || d.contains('dificil')) return 2;
+    if (d.contains('mitjana') || d.contains('media') || d.contains('moderada')) return 1;
+    return 0; // Fàcil
   }
 
   @override
@@ -132,7 +154,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 child: ListView(
-                  key: ValueKey<String>('$_maxDistance$_fitnessLevel$_wantHistory$_wantArchaeology$_wantArchitecture$_wantNature'),
+                  key: ValueKey<String>('$_maxDistance$_maxDifficulty$_fitnessLevel$_wantHistory$_wantArchaeology$_wantArchitecture$_wantNature'),
                   padding: const EdgeInsets.all(12),
                   children: [
                     AnimatedOpacity(
@@ -142,6 +164,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
                         maxDistance: _maxDistance,
                         fitnessLevel: _fitnessLevel,
                         wantHistory: _wantHistory,
+                        maxDifficulty: _maxDifficulty,
                         wantArchaeology: _wantArchaeology,
                         wantArchitecture: _wantArchitecture,
                         wantNature: _wantNature,
@@ -150,6 +173,10 @@ class _RecommendScreenState extends State<RecommendScreen> {
                         },
                         onFitnessChanged: (v) {
                           setState(() => _fitnessLevel = v);
+                        },
+                        onDifficultyChanged: (v) {
+                          setState(() => _maxDifficulty = v);
+                          _loadRecommendations();
                         },
                         onToggleHistory: (v) {
                           setState(() => _wantHistory = v);
@@ -220,6 +247,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
 
 class _FiltersCard extends StatelessWidget {
   final double maxDistance;
+  final String maxDifficulty;
   final String fitnessLevel;
 
   final bool wantHistory;
@@ -228,6 +256,7 @@ class _FiltersCard extends StatelessWidget {
   final bool wantNature;
 
   final ValueChanged<double> onMaxDistanceChanged;
+  final ValueChanged<String> onDifficultyChanged;
   final ValueChanged<String> onFitnessChanged;
 
   final ValueChanged<bool> onToggleHistory;
@@ -237,12 +266,14 @@ class _FiltersCard extends StatelessWidget {
 
   const _FiltersCard({
     required this.maxDistance,
+    required this.maxDifficulty,
     required this.fitnessLevel,
     required this.wantHistory,
     required this.wantArchaeology,
     required this.wantArchitecture,
     required this.wantNature,
     required this.onMaxDistanceChanged,
+    required this.onDifficultyChanged,
     required this.onFitnessChanged,
     required this.onToggleHistory,
     required this.onToggleArchaeology,
@@ -299,6 +330,32 @@ class _FiltersCard extends StatelessWidget {
               ),
 
               const SizedBox(height: 10),
+
+              const Text('Dificultat màxima', style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.green[200]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButton<String>(
+                  value: maxDifficulty,
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 'Fàcil', child: Text('Fàcil', style: TextStyle(fontSize: 16))),
+                    DropdownMenuItem(value: 'Mitjana', child: Text('Mitjana', style: TextStyle(fontSize: 16))),
+                    DropdownMenuItem(value: 'Difícil', child: Text('Difícil', style: TextStyle(fontSize: 16))),
+                    DropdownMenuItem(value: 'Molt Difícil', child: Text('Molt Difícil', style: TextStyle(fontSize: 16))),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) onDifficultyChanged(v);
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 12),
 
               const Text('Nivell físic', style: TextStyle(fontSize: 16)),
               const SizedBox(height: 6),

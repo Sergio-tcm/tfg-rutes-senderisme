@@ -35,6 +35,33 @@ class RouteModel {
     required this.createdAt,
   });
 
+  // Normalizes difficulty names to a standard Catalan set used in UI
+  static String _normalizeDifficulty(String? difficulty, double distanceKm, int elevationGain) {
+    final raw = (difficulty ?? '').trim();
+    final norm = raw.toLowerCase();
+
+    // Explicit mappings (Catalan/Spanish/English common variants)
+    if (norm.contains('fàcil') || norm.contains('facil') || norm == 'easy') {
+      return 'Fàcil';
+    }
+    if (norm.contains('molt') || norm.contains('muy') || norm.contains('very')) {
+      return 'Molt Difícil';
+    }
+    if (norm.contains('mitjana') || norm.contains('mittana') || norm.contains('media') || norm.contains('moderada') || norm.contains('moderate')) {
+      return 'Mitjana';
+    }
+    if (norm.contains('difícil') || norm.contains('dificil') || norm == 'difficult') {
+      return 'Difícil';
+    }
+
+    // Fallback: compute from distance/elevation if missing or unrecognized
+    final score = (distanceKm * 1.2) + (elevationGain / 80.0);
+    if (score < 7) return 'Fàcil';
+    if (score < 17) return 'Mitjana';
+    if (score < 27) return 'Difícil';
+    return 'Molt Difícil';
+  }
+
   static int _toInt(dynamic v) {
     if (v is int) return v;
     if (v is num) return v.toInt();
@@ -55,13 +82,17 @@ class RouteModel {
   }
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
+    final distanceKm = _toDouble(json['distance_km']);
+    final elevationGain = _toInt(json['elevation_gain']);
+    final normalizedDifficulty = _normalizeDifficulty(json['difficulty']?.toString(), distanceKm, elevationGain);
+
     return RouteModel(
       routeId: _toInt(json['route_id']),
       name: (json['name'] ?? '').toString(),
       description: (json['description'] ?? '').toString(),
-      distanceKm: _toDouble(json['distance_km']),
-      difficulty: (json['difficulty'] ?? '').toString(),
-      elevationGain: _toInt(json['elevation_gain']),
+      distanceKm: distanceKm,
+      difficulty: normalizedDifficulty,
+      elevationGain: elevationGain,
       location: (json['location'] ?? '').toString(),
       estimatedTime: (json['estimated_time'] ?? '').toString(),
       creatorId: _toInt(json['creator_id']),
