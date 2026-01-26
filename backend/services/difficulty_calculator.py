@@ -15,7 +15,7 @@ Standard hiking scales:
 - Very Difficult: excellent fitness required, steep climbs
 """
 
-def calculate_difficulty(distance_km: float, elevation_gain: int, estimated_time: str = None) -> str:
+def calculate_difficulty(distance_km: float, elevation_gain: int, estimated_time: str = None, lang: str = 'es') -> str:
     """
     Calculate route difficulty based on hiking parameters.
     
@@ -23,10 +23,12 @@ def calculate_difficulty(distance_km: float, elevation_gain: int, estimated_time
         distance_km: Distance in kilometers
         elevation_gain: Total elevation gain in meters
         estimated_time: Estimated time as string (e.g., "2:30", "2h30m")
+        lang: Language for output ('es' for Spanish, 'ca' for Catalan)
     
     Returns:
-        Difficulty level: "Fácil" (Easy), "Moderada" (Moderate), 
-                         "Difícil" (Difficult), "Muy Difícil" (Very Difficult)
+        Difficulty level: 
+        - Spanish: "Fácil", "Moderada", "Difícil", "Muy Difícil"
+        - Catalan: "Fàcil", "Mitjana", "Difícil", "Molt Difícil"
     """
     
     # Default values for invalid inputs
@@ -63,12 +65,18 @@ def calculate_difficulty(distance_km: float, elevation_gain: int, estimated_time
     # Classify based on standard hiking difficulty scales
     # These thresholds are standard in European hiking
     if difficulty_score < 5:
+        if lang == 'ca':
+            return "Fàcil"
         return "Fácil"
     elif difficulty_score < 15:
+        if lang == 'ca':
+            return "Mitjana"
         return "Moderada"
     elif difficulty_score < 30:
         return "Difícil"
     else:
+        if lang == 'ca':
+            return "Molt Difícil"
         return "Muy Difícil"
 
 

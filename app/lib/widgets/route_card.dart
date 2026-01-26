@@ -172,17 +172,24 @@ class _DifficultyBadge extends StatelessWidget {
     Color textColor;
     final diff = difficulty.toLowerCase().trim();
     
+    // Soporta ambos idiomas: español y catalán
     if (diff.contains('fàcil') || diff.contains('facil') || diff == 'easy') {
       bgColor = Colors.green[100]!;
       textColor = Colors.green[800]!;
-    } else if (diff.contains('mitjana') || diff.contains('media') || diff == 'moderate') {
+    } else if (diff.contains('mittana') || 
+               diff.contains('mitjana') || 
+               diff.contains('mittà') ||
+               diff.contains('media') || 
+               diff == 'moderate') {
       bgColor = Colors.orange[100]!;
       textColor = Colors.orange[800]!;
     } else if (diff.contains('difícil') && diff.contains('muy')) {
       // Muy Difícil
       bgColor = Colors.red[200]!;
       textColor = Colors.red[900]!;
-    } else if (diff.contains('difícil') || diff.contains('dificil') || diff == 'difficult') {
+    } else if (diff.contains('difícil') || 
+               diff.contains('dificil') || 
+               diff == 'difficult') {
       bgColor = Colors.red[100]!;
       textColor = Colors.red[800]!;
     } else {

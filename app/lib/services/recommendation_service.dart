@@ -61,8 +61,9 @@ class RecommendationService {
     score += distScore;
 
     // B) Dificultad (máx 30 puntos)
-    final diff = r.difficulty.toLowerCase().trim();
-    if (allowedDifficulties.contains(diff)) {
+    final diffAllowed = _isDifficultyAllowed(r.difficulty, allowedDifficulties);
+    
+    if (diffAllowed) {
       score += 30;
     } else {
       // No la descartamos, pero penaliza
@@ -98,29 +99,79 @@ class RecommendationService {
   }
 
   Set<String> _allowedDifficultiesForFitness(String fitnessLevel) {
-    // Normalizamos nombres típicos
-    // (si en tu app usas 'Fàcil/Mitjana/Difícil/Muy Difícil', mejor mantenerlo así en BD)
+    // Normalizamos nombres típicos en español y catalán
+    // Soportamos ambos idiomas y variaciones
     switch (fitnessLevel) {
       case 'baix':
       case 'bajo':
       case 'low':
-        return {'fàcil', 'facil', 'fácil', 'easy'};
+        return {
+          'fàcil', 'facil', 'fácil', 'easy',
+        };
       case 'alt':
       case 'alto':
       case 'high':
         return {
-          'fàcil', 'facil', 'fácil', 'easy',
-          'mitjana', 'media', 'moderate',
+          'fácil', 'facil', 'fàcil', 'easy',
+          'moderada', 'media', 'moderate',
           'difícil', 'dificil', 'difficult',
-          'muy difícil', 'muy dificil', 'very difficult'
+          'muy difícil', 'muy dificil', 'very difficult',
+          'molt difícil', 'molt dificil',
+          'mitjana', 'mittana',
         };
       default:
-        // medio
+        // medio / mitjà
         return {
-          'fàcil', 'facil', 'fácil', 'easy',
-          'mitjana', 'media', 'moderate'
+          'fácil', 'facil', 'fàcil', 'easy',
+          'moderada', 'media', 'moderate',
+          'mitjana', 'mittana',
         };
     }
+  }
+
+  bool _isDifficultyAllowed(String difficulty, Set<String> allowedDifficulties) {
+    final normalized = difficulty.toLowerCase().trim();
+    
+    // Exact match in set
+    if (allowedDifficulties.contains(normalized)) {
+      return true;
+    }
+    
+    // Fuzzy matching for common variations
+    // Español: Fácil, Moderada, Difícil, Muy Difícil
+    // Catalán: Fàcil, Mitjana, Difícil, Molt Difícil
+    
+    if (normalized.contains('fácil') || normalized.contains('facil') || normalized.contains('fàcil')) {
+      return allowedDifficulties.any((d) => 
+        d.contains('fácil') || d.contains('facil') || d.contains('fàcil')
+      );
+    }
+    
+    if (normalized.contains('moderada') || normalized.contains('mitjana') || 
+        normalized.contains('mittana') || normalized.contains('media')) {
+      return allowedDifficulties.any((d) => 
+        d.contains('moderada') || d.contains('mittana') || 
+        d.contains('mitjana') || d.contains('media')
+      );
+    }
+    
+    if (normalized.contains('difícil') || normalized.contains('dificil')) {
+      // Check if it's "very difficult" vs just "difficult"
+      final isVeryDifficult = normalized.contains('muy') || normalized.contains('molt');
+      
+      if (isVeryDifficult) {
+        return allowedDifficulties.any((d) => 
+          (d.contains('muy') || d.contains('molt')) && 
+          (d.contains('difícil') || d.contains('dificil'))
+        );
+      } else {
+        return allowedDifficulties.any((d) => 
+          d.contains('difícil') || d.contains('dificil')
+        );
+      }
+    }
+    
+    return false;
   }
 }
 
