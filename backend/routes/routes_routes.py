@@ -9,6 +9,34 @@ routes_bp = Blueprint("routes", __name__, url_prefix="/routes")
 
 cultural_bp = Blueprint("cultural", __name__)
 
+def normalize_difficulty(difficulty: str) -> str:
+    """
+    Normalize difficulty to standard format.
+    Handles both Spanish and Catalan names.
+    Returns: "Fácil", "Moderada", "Difícil", "Muy Difícil" (Spanish)
+             or "Fàcil", "Mitjana", "Difícil", "Molt Difícil" (Catalan)
+    """
+    if not difficulty:
+        return ""
+    
+    norm = difficulty.lower().strip()
+    
+    # Catalan spellings with proper capitalization
+    if 'fàcil' in norm or 'facil' in norm or norm == 'easy':
+        return 'Fàcil'
+    elif 'mitt' in norm or 'media' in norm or 'moderate' in norm:
+        return 'Mitjana'
+    elif 'difícil' in norm or 'dificil' in norm or norm == 'difficult':
+        # Check if it's "very difficult"
+        if 'molt' in norm or 'muy' in norm or 'very' in norm:
+            return 'Molt Difícil'
+        return 'Difícil'
+    elif 'molt' in norm or 'muy' in norm:
+        return 'Molt Difícil'
+    
+    # Return original if can't determine
+    return difficulty if difficulty else ""
+
 @routes_bp.route("", methods=["GET"])
 def get_routes():
     conn = get_connection()
@@ -37,9 +65,10 @@ def get_routes():
         
         # Calculate difficulty dynamically if not set or invalid
         if not difficulty_stored or difficulty_stored.strip() == "":
-            difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time)
+            difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
         else:
-            difficulty = difficulty_stored
+            # Normalize existing difficulty to ensure consistency
+            difficulty = normalize_difficulty(difficulty_stored)
         
         routes.append({
             "route_id": r[0],
@@ -81,9 +110,10 @@ def create_route():
 
     # Calculate difficulty if not provided or invalid
     if not difficulty_input or difficulty_input.strip() == "":
-        difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time)
+        difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
     else:
-        difficulty = difficulty_input
+        # Normalize the input difficulty
+        difficulty = normalize_difficulty(difficulty_input)
 
     cultural_summary = data.get("cultural_summary") or ""
     has_historical_value = bool(data.get("has_historical_value", False))
@@ -126,9 +156,9 @@ def create_route():
     response_difficulty_stored = r[4] or ""
     
     if not response_difficulty_stored or response_difficulty_stored.strip() == "":
-        response_difficulty = calculate_difficulty(response_distance, response_elevation, response_time)
+        response_difficulty = calculate_difficulty(response_distance, response_elevation, response_time, lang='ca')
     else:
-        response_difficulty = response_difficulty_stored
+        response_difficulty = normalize_difficulty(response_difficulty_stored)
 
     return jsonify({
         "route_id": r[0],
