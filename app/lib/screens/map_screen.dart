@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/map_config.dart';
 import '../models/cultural_item.dart';
+import '../services/cultural_items_service.dart';
 import '../services/cultural_near_service.dart';
 import '../services/location_service.dart';
 import '../services/route_files_service.dart';
@@ -35,6 +36,7 @@ class _MapScreenState extends State<MapScreen> {
   // Near me cultural
   final _locationService = LocationService();
   final _culturalNearService = CulturalNearService();
+  final _culturalItemsService = CulturalItemsService();
   final _routingService = RoutingService();
 
   bool _loading = false;
@@ -68,7 +70,8 @@ class _MapScreenState extends State<MapScreen> {
     });
 
     if (widget.routeId != null) {
-      _loadRouteTrack(widget.routeId!);
+      _radiusM = 5000;
+      _initRouteMode();
     } else {
       _loadNearMe();
     }
@@ -171,6 +174,104 @@ class _MapScreenState extends State<MapScreen> {
     } finally {
       setState(() => _loading = false);
     }
+  }
+
+  Future<void> _initRouteMode() async {
+    final routeId = widget.routeId;
+    if (routeId == null) return;
+    await _loadRouteTrack(routeId);
+    await _loadRouteCulturalItems(recomputeIfEmpty: true);
+  }
+
+  Future<void> _loadRouteCulturalItems({bool recomputeIfEmpty = false}) async {
+    final routeId = widget.routeId;
+    if (routeId == null) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+      _nearItems = const [];
+    });
+
+    try {
+      var items = await _culturalItemsService.getByRoute(routeId);
+
+      if (items.isEmpty && recomputeIfEmpty) {
+        await _culturalItemsService.recomputeForRoute(
+          routeId: routeId,
+          radiusM: _radiusM,
+        );
+        items = await _culturalItemsService.getByRoute(routeId);
+      }
+
+      setState(() {
+        _nearItems = items;
+      });
+
+      _fitToRouteAndItems();
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _recomputeRouteCulturalItems() async {
+    final routeId = widget.routeId;
+    if (routeId == null) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await _culturalItemsService.recomputeForRoute(
+        routeId: routeId,
+        radiusM: _radiusM,
+      );
+      final items = await _culturalItemsService.getByRoute(routeId);
+      setState(() {
+        _nearItems = items;
+      });
+
+      _fitToRouteAndItems();
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _fitToRouteAndItems() {
+    if (!mounted) return;
+
+    final points = <LatLng>[];
+    if (_track.isNotEmpty) {
+      points.addAll(_track);
+    }
+    if (_nearItems.isNotEmpty) {
+      points.addAll(
+        _nearItems.map((item) => LatLng(item.latitude, item.longitude)),
+      );
+    }
+
+    if (points.length < 2) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final bounds = LatLngBounds.fromPoints(points);
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.all(40),
+        ),
+      );
+    });
   }
 
   // ---------- UI helpers ----------
@@ -580,12 +681,11 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ),
-          if (!isRouteMode)
-            IconButton(
-              tooltip: 'Recarregar (prop)',
-              icon: const Icon(Icons.my_location, color: Colors.white),
-              onPressed: _loadNearMe,
-            ),
+          IconButton(
+            tooltip: isRouteMode ? 'Recalcular punts' : 'Recarregar (prop)',
+            icon: Icon(isRouteMode ? Icons.refresh : Icons.my_location, color: Colors.white),
+            onPressed: isRouteMode ? _recomputeRouteCulturalItems : _loadNearMe,
+          ),
         ],
       ),
       body: Container(
@@ -643,8 +743,8 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
 
-              // markers culturales (modo global)
-              if (!isRouteMode && _nearItems.isNotEmpty)
+              // markers culturales
+              if (_nearItems.isNotEmpty)
                 MarkerLayer(
                   markers: _nearItems.where((item) => _walkingTrack.isEmpty || item == _currentDestination).map((item) {
                     return Marker(
@@ -774,8 +874,27 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ),
 
-          // contador simple (modo global)
-          if (!isRouteMode)
+          if (isRouteMode && !_loading && _nearItems.isEmpty && _error == null)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Material(
+                elevation: 3,
+                borderRadius: BorderRadius.circular(10),
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text(
+                    'Sense punts culturals per aquest radi',
+                    style: TextStyle(color: Colors.green[800], fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ),
+
+          // contador simple
+          if (_nearItems.isNotEmpty)
             Positioned(
               left: 12,
               bottom: 12,

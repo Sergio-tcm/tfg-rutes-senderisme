@@ -1,9 +1,12 @@
 import 'package:app/screens/map_screen.dart';
 import 'package:flutter/material.dart';
+import '../models/cultural_item.dart';
 import '../models/route_model.dart';
+import '../services/cultural_items_service.dart';
 
 class RouteDetailScreen extends StatelessWidget {
   final RouteModel route;
+  static final _culturalItemsService = CulturalItemsService();
 
   const RouteDetailScreen({super.key, required this.route});
 
@@ -188,9 +191,28 @@ class RouteDetailScreen extends StatelessWidget {
                           children: [
                             _SectionTitle(title: 'Resum cultural'),
                             const SizedBox(height: 8),
-                            Text(
-                              route.culturalSummary.isEmpty ? '—' : route.culturalSummary,
-                              style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87), // Aumentado tamaño y color
+                            FutureBuilder<List<CulturalItem>>(
+                              future: _loadCulturalItemsWithRecompute(route.routeId),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState != ConnectionState.done) {
+                                  return const LinearProgressIndicator();
+                                }
+
+                                if (snapshot.hasError || snapshot.data == null) {
+                                  final fallback = route.culturalSummary.isEmpty ? '—' : route.culturalSummary;
+                                  return Text(
+                                    fallback,
+                                    style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87),
+                                  );
+                                }
+
+                                final items = snapshot.data!;
+                                final summary = _buildCulturalTypesSummary(items);
+                                return Text(
+                                  summary.isEmpty ? '—' : summary,
+                                  style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -324,6 +346,107 @@ class RouteDetailScreen extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Añadido padding
     );
+  }
+
+  Future<List<CulturalItem>> _loadCulturalItemsWithRecompute(int routeId) async {
+    var items = await _culturalItemsService.getByRoute(routeId);
+    if (items.isEmpty) {
+      await _culturalItemsService.recomputeForRoute(routeId: routeId, radiusM: 5000);
+      items = await _culturalItemsService.getByRoute(routeId);
+    }
+    return items;
+  }
+
+  String _buildCulturalTypesSummary(List<CulturalItem> items) {
+    if (items.isEmpty) return '';
+
+    final counts = <String, int>{};
+    for (final item in items) {
+      final key = _normalizeType(item.type);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+
+    final parts = counts.entries.map((e) {
+      final singular = _prettyType(e.key);
+      final plural = _pluralizeType(e.key, singular);
+      return e.value == 1 ? singular : plural;
+    }).toList();
+
+    parts.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return parts.join(', ');
+  }
+
+  String _normalizeType(String type) => type.trim().toLowerCase();
+
+  String _prettyType(String type) {
+    switch (type) {
+      case 'conjunt arquitectònic':
+        return 'Conjunt arquitectònic';
+      case 'edifici':
+        return 'Edifici';
+      case 'element arquitectònic':
+        return 'Element arquitectònic';
+      case 'element urbà':
+        return 'Element urbà';
+      case 'obra civil':
+        return 'Obra civil';
+      case 'jaciment arqueològic':
+        return 'Jaciment arqueològic';
+      case 'jaciment paleontològic':
+        return 'Jaciment paleontològic';
+      case 'espècimen botànic':
+        return 'Espècimen botànic';
+      case 'zona d\'interès':
+        return 'Zona d\'interès';
+      case 'costumari':
+        return 'Costumari';
+      case 'manifestació festiva':
+        return 'Manifestació festiva';
+      case 'música i dansa':
+        return 'Música i dansa';
+      case 'tradició oral':
+        return 'Tradició oral';
+      case 'tècnica artesanal':
+        return 'Tècnica artesanal';
+      case 'fons bibliogràfic':
+        return 'Fons bibliogràfic';
+      case 'fons d\'imatges':
+        return 'Fons d\'imatges';
+      case 'fons documental':
+        return 'Fons documental';
+      case 'col·lecció':
+        return 'Col·lecció';
+      case 'objecte':
+        return 'Objecte';
+      default:
+        return 'Altres';
+    }
+  }
+
+  String _pluralizeType(String type, String singular) {
+    const plurals = {
+      'conjunt arquitectònic': 'Conjunts arquitectònics',
+      'edifici': 'Edificis',
+      'element arquitectònic': 'Elements arquitectònics',
+      'element urbà': 'Elements urbans',
+      'obra civil': 'Obres civils',
+      'jaciment arqueològic': 'Jaciments arqueològics',
+      'jaciment paleontològic': 'Jaciments paleontològics',
+      'espècimen botànic': 'Espècimens botànics',
+      'zona d\'interès': 'Zones d\'interès',
+      'costumari': 'Costumaris',
+      'manifestació festiva': 'Manifestacions festives',
+      'música i dansa': 'Músiques i danses',
+      'tradició oral': 'Tradicions orals',
+      'tècnica artesanal': 'Tècniques artesanals',
+      'fons bibliogràfic': 'Fons bibliogràfics',
+      'fons d\'imatges': 'Fons d\'imatges',
+      'fons documental': 'Fons documentals',
+      'col·lecció': 'Col·leccions',
+      'objecte': 'Objectes',
+    };
+
+    return plurals[type] ?? '${singular}s';
   }
 
   String _formatDate(DateTime dt) {
