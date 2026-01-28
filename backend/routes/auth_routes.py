@@ -12,6 +12,7 @@ def register():
     name = data.get("name", "").strip()
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    preferences = data.get("preferences") or None
 
     if not name or not email or not password:
         return jsonify({"error": "Falten camps: name, email, password"}), 400
@@ -37,6 +38,23 @@ def register():
             (name, email, password_hash),
         )
         user = cur.fetchone()
+
+        if preferences:
+            fitness_level = (preferences.get("fitness_level") or "").strip()
+            preferred_distance = preferences.get("preferred_distance")
+            environment_type = (preferences.get("environment_type") or "").strip()
+            cultural_interest = (preferences.get("cultural_interest") or "").strip()
+
+            cur.execute(
+                """
+                INSERT INTO user_preferences (
+                    user_id, fitness_level, preferred_distance,
+                    environment_type, cultural_interest, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                """,
+                (user[0], fitness_level, preferred_distance, environment_type, cultural_interest),
+            )
         conn.commit()
     except Exception:
         conn.rollback()
