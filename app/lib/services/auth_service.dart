@@ -8,13 +8,19 @@ class AuthService {
     required String name,
     required String email,
     required String password,
+    Map<String, dynamic>? preferences,
   }) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/auth/register');
 
     final res = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name, 'email': email, 'password': password}),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'password': password,
+        if (preferences != null) 'preferences': preferences,
+      }),
     );
 
     final data = jsonDecode(res.body);

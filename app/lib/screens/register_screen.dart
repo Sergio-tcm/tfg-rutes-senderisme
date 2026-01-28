@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import 'register_preferences_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,13 +18,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _loading = false;
   String? _error;
-  String? _ok;
 
   Future<void> _register() async {
     setState(() {
       _loading = true;
       _error = null;
-      _ok = null;
     });
 
     try {
@@ -33,9 +32,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passCtrl.text,
       );
 
-      setState(() {
-        _ok = 'Usuari creat. Ja pots iniciar sessió.';
-      });
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RegisterPreferencesScreen(
+            email: _emailCtrl.text.trim(),
+            password: _passCtrl.text,
+          ),
+        ),
+      );
     } catch (e) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
@@ -183,27 +189,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     child: Text(
                                       _error!,
                                       style: TextStyle(color: Colors.red[700]),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (_ok != null)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.green[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.green[200]!),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.check_circle, color: Colors.green[700]),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _ok!,
-                                      style: TextStyle(color: Colors.green[700]),
                                     ),
                                   ),
                                 ],
