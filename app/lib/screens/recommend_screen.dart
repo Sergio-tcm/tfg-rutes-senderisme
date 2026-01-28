@@ -4,6 +4,7 @@ import '../models/route_model.dart';
 import '../models/user_preferences_model.dart';
 import '../services/recommendation_service.dart';
 import '../services/routes_service.dart';
+import '../services/user_preferences_service.dart';
 import '../widgets/route_card.dart';
 import 'route_detail_screen.dart';
 
@@ -17,69 +18,70 @@ class RecommendScreen extends StatefulWidget {
 class _RecommendScreenState extends State<RecommendScreen> {
   final _routesService = RoutesService();
   final _recoService = RecommendationService();
+  final _prefsService = UserPreferencesService();
 
-  // Filtres UI
-  double _preferredDistance = 15.0; // Distància objectiu
-  String _maxDifficulty = 'Molt Difícil'; // Filtrem per dificultat màxima permesa
-  bool _wantHistory = false;
-  bool _wantArchaeology = false;
-  bool _wantArchitecture = false;
-  bool _wantNature = false;
+  // Ajustos ràpids
+  bool _useDistanceOverride = false;
+  double _distanceOverride = 8.0;
+  String _maxDifficulty = 'Molt Difícil';
+  bool _boostCulture = false;
 
-  Future<List<RouteModel>>? _routesFuture;
+  Future<_RecoData>? _dataFuture;
 
   @override
   void initState() {
     super.initState();
-    _routesFuture = _routesService.getRoutes();
+    _dataFuture = _loadData();
   }
 
-  UserPreferencesModel _buildPrefsFromFilters() {
-    // De momento convertimos filtros a "preferencias"
-    // (Luego cuando tengamos /preferences/me esto se reemplaza por datos reales)
-    final interests = <String>[];
-    if (_wantHistory) interests.add('historia');
-    if (_wantArchaeology) interests.add('arqueologia');
-    if (_wantArchitecture) interests.add('arquitectura');
-    if (_wantNature) interests.add('natur');
+  Future<_RecoData> _loadData() async {
+    final routes = await _routesService.getRoutes();
+    final prefsMap = await _prefsService.getPreferences();
+    final prefs = _prefsFromApi(prefsMap);
+    return _RecoData(routes: routes, prefs: prefs);
+  }
+
+  UserPreferencesModel _prefsFromApi(Map<String, dynamic> data) {
+    if (data.isEmpty) {
+      return const UserPreferencesModel(
+        prefId: 0,
+        userId: 0,
+        preferredDistance: 10,
+        environmentType: 'mixt',
+        culturalInterest: 'mitja',
+        updatedAt: null,
+      );
+    }
+    return UserPreferencesModel.fromJson(data);
+  }
+
+  UserPreferencesModel _applyOverrides(UserPreferencesModel base) {
+    final preferredDistance = _useDistanceOverride
+        ? _distanceOverride
+        : (base.preferredDistance ?? 10.0);
+    final culturalInterest = _boostCulture ? 'alt' : (base.culturalInterest ?? '');
 
     return UserPreferencesModel(
-      prefId: 0,
-      userId: 0,
-      preferredDistance: _preferredDistance,
-      environmentType: null,
-      culturalInterest: interests.join(','),
-      updatedAt: null,
+      prefId: base.prefId,
+      userId: base.userId,
+      preferredDistance: preferredDistance,
+      environmentType: base.environmentType,
+      culturalInterest: culturalInterest,
+      updatedAt: base.updatedAt,
     );
   }
 
   void _loadRecommendations() {
     setState(() {
-      _routesFuture = _routesService.getRoutes();
+      _dataFuture = _loadData();
     });
   }
 
   List<RouteModel> _applyHardFilters(List<RouteModel> routes) {
-    // Filtro duro por dificultat màxima seleccionada
     final maxRank = _difficultyRank(_maxDifficulty);
-    final filteredByDifficulty = routes.where((r) {
+    return routes.where((r) {
       final rank = _difficultyRank(r.difficulty);
       return rank <= maxRank;
-    }).toList();
-
-    // Filtro cultural duro si el usuario activa chips
-    // Si no activa ninguno, no filtramos por cultura.
-    final wantsAnyCulture = _wantHistory || _wantArchaeology || _wantArchitecture || _wantNature;
-
-    if (!wantsAnyCulture) return filteredByDifficulty;
-
-    return filteredByDifficulty.where((r) {
-      bool ok = false;
-      if (_wantHistory && r.hasHistoricalValue) ok = true;
-      if (_wantArchaeology && r.hasArchaeology) ok = true;
-      if (_wantArchitecture && r.hasArchitecture) ok = true;
-      if (_wantNature && r.hasNaturalInterest) ok = true;
-      return ok;
     }).toList();
   }
 
@@ -103,7 +105,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
           IconButton(
             onPressed: () {
               setState(() {
-                _routesFuture = _routesService.getRoutes();
+                _dataFuture = _loadData();
               });
             },
             icon: const Icon(Icons.refresh),
@@ -119,8 +121,8 @@ class _RecommendScreenState extends State<RecommendScreen> {
           ),
         ),
         child: SafeArea(
-          child: FutureBuilder<List<RouteModel>>(
-            future: _routesFuture,
+          child: FutureBuilder<_RecoData>(
+            future: _dataFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
@@ -128,11 +130,13 @@ class _RecommendScreenState extends State<RecommendScreen> {
               if (snapshot.hasError) {
                 return _ErrorState(
                   message: 'Error carregant rutes',
-                  onRetry: () => setState(() => _routesFuture = _routesService.getRoutes()),
+                  onRetry: () => setState(() => _dataFuture = _loadData()),
                 );
               }
 
-              final routes = snapshot.data ?? [];
+              final data = snapshot.data;
+              final routes = data?.routes ?? [];
+              final basePrefs = data?.prefs;
               if (routes.isEmpty) {
                 return const Center(child: Text('No hi ha rutes disponibles'));
               }
@@ -141,7 +145,16 @@ class _RecommendScreenState extends State<RecommendScreen> {
               final filtered = _applyHardFilters(routes);
 
               // 2) Construimos prefs (por ahora desde filtros)
-              final prefs = _buildPrefsFromFilters();
+              final prefs = basePrefs == null
+                  ? const UserPreferencesModel(
+                      prefId: 0,
+                      userId: 0,
+                      preferredDistance: 10,
+                      environmentType: 'mixt',
+                      culturalInterest: 'mitja',
+                      updatedAt: null,
+                    )
+                  : _applyOverrides(basePrefs);
 
               // 3) Recomendamos (scoring)
               final ranked = _recoService.rankRoutes(
@@ -154,37 +167,30 @@ class _RecommendScreenState extends State<RecommendScreen> {
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 child: ListView(
-                  key: ValueKey<String>('$_preferredDistance$_maxDifficulty$_wantHistory$_wantArchaeology$_wantArchitecture$_wantNature'),
+                  key: ValueKey<String>('$_useDistanceOverride$_distanceOverride$_maxDifficulty$_boostCulture'),
                   padding: const EdgeInsets.all(12),
                   children: [
                     AnimatedOpacity(
                       opacity: 1.0,
                       duration: const Duration(milliseconds: 500),
-                      child: _FiltersCard(
-                        preferredDistance: _preferredDistance,
-                        wantHistory: _wantHistory,
+                      child: _QuickAdjustCard(
+                        basePrefs: basePrefs,
+                        useDistanceOverride: _useDistanceOverride,
+                        distanceOverride: _distanceOverride,
                         maxDifficulty: _maxDifficulty,
-                        wantArchaeology: _wantArchaeology,
-                        wantArchitecture: _wantArchitecture,
-                        wantNature: _wantNature,
-                        onPreferredDistanceChanged: (v) {
-                          setState(() => _preferredDistance = v);
+                        boostCulture: _boostCulture,
+                        onToggleDistanceOverride: (v) {
+                          setState(() => _useDistanceOverride = v);
+                        },
+                        onDistanceOverrideChanged: (v) {
+                          setState(() => _distanceOverride = v);
                         },
                         onDifficultyChanged: (v) {
                           setState(() => _maxDifficulty = v);
                           _loadRecommendations();
                         },
-                        onToggleHistory: (v) {
-                          setState(() => _wantHistory = v);
-                        },
-                        onToggleArchaeology: (v) {
-                          setState(() => _wantArchaeology = v);
-                        },
-                        onToggleArchitecture: (v) {
-                          setState(() => _wantArchitecture = v);
-                        },
-                        onToggleNature: (v) {
-                          setState(() => _wantNature = v);
+                        onToggleBoostCulture: (v) {
+                          setState(() => _boostCulture = v);
                         },
                       ),
                     ),
@@ -267,40 +273,47 @@ class _RecommendScreenState extends State<RecommendScreen> {
   }
 }
 
-class _FiltersCard extends StatelessWidget {
-  final double preferredDistance;
+class _RecoData {
+  final List<RouteModel> routes;
+  final UserPreferencesModel prefs;
+
+  const _RecoData({
+    required this.routes,
+    required this.prefs,
+  });
+}
+
+class _QuickAdjustCard extends StatelessWidget {
+  final UserPreferencesModel? basePrefs;
+  final bool useDistanceOverride;
+  final double distanceOverride;
   final String maxDifficulty;
+  final bool boostCulture;
 
-  final bool wantHistory;
-  final bool wantArchaeology;
-  final bool wantArchitecture;
-  final bool wantNature;
-
-  final ValueChanged<double> onPreferredDistanceChanged;
+  final ValueChanged<bool> onToggleDistanceOverride;
+  final ValueChanged<double> onDistanceOverrideChanged;
   final ValueChanged<String> onDifficultyChanged;
+  final ValueChanged<bool> onToggleBoostCulture;
 
-  final ValueChanged<bool> onToggleHistory;
-  final ValueChanged<bool> onToggleArchaeology;
-  final ValueChanged<bool> onToggleArchitecture;
-  final ValueChanged<bool> onToggleNature;
-
-  const _FiltersCard({
-    required this.preferredDistance,
+  const _QuickAdjustCard({
+    required this.basePrefs,
+    required this.useDistanceOverride,
+    required this.distanceOverride,
     required this.maxDifficulty,
-    required this.wantHistory,
-    required this.wantArchaeology,
-    required this.wantArchitecture,
-    required this.wantNature,
-    required this.onPreferredDistanceChanged,
+    required this.boostCulture,
+    required this.onToggleDistanceOverride,
+    required this.onDistanceOverrideChanged,
     required this.onDifficultyChanged,
-    required this.onToggleHistory,
-    required this.onToggleArchaeology,
-    required this.onToggleArchitecture,
-    required this.onToggleNature,
+    required this.onToggleBoostCulture,
   });
 
   @override
   Widget build(BuildContext context) {
+    final baseDistance = basePrefs?.preferredDistance ?? 10.0;
+    final distanceLabel = useDistanceOverride
+        ? '${distanceOverride.toStringAsFixed(0)} km'
+        : '${baseDistance.toStringAsFixed(0)} km (preferències)';
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -322,10 +335,10 @@ class _FiltersCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.filter_list, color: Colors.green[700]),
+                  Icon(Icons.auto_awesome, color: Colors.green[700]),
                   const SizedBox(width: 8),
                   Text(
-                    'Filtres',
+                    'Recomanació automàtica',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -334,21 +347,33 @@ class _FiltersCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-
-              Text('Distancia objectiu: ${preferredDistance.toStringAsFixed(0)} km (preferida)', style: const TextStyle(fontSize: 16)),
-              Slider(
-                value: preferredDistance,
-                min: 2,
-                max: 40,
-                divisions: 38,
-                label: preferredDistance.toStringAsFixed(0),
-                activeColor: Colors.green[700],
-                onChanged: onPreferredDistanceChanged,
+              const SizedBox(height: 6),
+              Text(
+                'Basada en les teves preferències. Pots ajustar-la per avui.',
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
-
-              const SizedBox(height: 10),
-
+              const SizedBox(height: 12),
+              SwitchListTile.adaptive(
+                value: useDistanceOverride,
+                onChanged: onToggleDistanceOverride,
+                title: const Text('Tinc poc temps (distància més curta)'),
+                subtitle: Text('Distància actual: $distanceLabel'),
+                activeTrackColor: Colors.green[700],
+                activeThumbColor: Colors.white,
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (useDistanceOverride) ...[
+                Slider(
+                  value: distanceOverride,
+                  min: 2,
+                  max: 30,
+                  divisions: 28,
+                  label: distanceOverride.toStringAsFixed(0),
+                  activeColor: Colors.green[700],
+                  onChanged: onDistanceOverrideChanged,
+                ),
+              ],
+              const SizedBox(height: 6),
               const Text('Dificultat màxima', style: TextStyle(fontSize: 16)),
               const SizedBox(height: 6),
               Container(
@@ -372,44 +397,15 @@ class _FiltersCard extends StatelessWidget {
                   },
                 ),
               ),
-
-              const SizedBox(height: 12),
-
-              const Text('Interès cultural', style: TextStyle(fontSize: 16)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Història', style: TextStyle(fontSize: 16)),
-                    selected: wantHistory,
-                    selectedColor: Colors.green[200],
-                    checkmarkColor: Colors.green[800],
-                    onSelected: onToggleHistory,
-                  ),
-                  FilterChip(
-                    label: const Text('Arqueologia', style: TextStyle(fontSize: 16)),
-                    selected: wantArchaeology,
-                    selectedColor: Colors.green[200],
-                    checkmarkColor: Colors.green[800],
-                    onSelected: onToggleArchaeology,
-                  ),
-                  FilterChip(
-                    label: const Text('Arquitectura', style: TextStyle(fontSize: 16)),
-                    selected: wantArchitecture,
-                    selectedColor: Colors.green[200],
-                    checkmarkColor: Colors.green[800],
-                    onSelected: onToggleArchitecture,
-                  ),
-                  FilterChip(
-                    label: const Text('Naturalesa', style: TextStyle(fontSize: 16)),
-                    selected: wantNature,
-                    selectedColor: Colors.green[200],
-                    checkmarkColor: Colors.green[800],
-                    onSelected: onToggleNature,
-                  ),
-                ],
+              const SizedBox(height: 10),
+              SwitchListTile.adaptive(
+                value: boostCulture,
+                onChanged: onToggleBoostCulture,
+                title: const Text('Vull més cultura avui'),
+                subtitle: const Text('Prioritza rutes amb valor cultural'),
+                activeTrackColor: Colors.green[700],
+                activeThumbColor: Colors.white,
+                contentPadding: EdgeInsets.zero,
               ),
             ],
           ),
