@@ -187,7 +187,7 @@ def get_cultural_items(route_id):
                 JOIN cultural_items ci ON ci.item_id = rci.item_id
                 WHERE rci.route_id = %s
                 ORDER BY rci.distance_m ASC NULLS LAST, ci.title ASC
-                LIMIT 200
+                LIMIT 50
             """, (route_id,))
             rows = cur.fetchall()
 

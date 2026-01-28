@@ -127,7 +127,7 @@ def list_route_cultural_items(route_id: int):
                 join cultural_items ci on ci.item_id = rci.item_id
                 where rci.route_id = %s
                 order by rci.distance_m asc nulls last, ci.title asc
-                limit 200
+                limit 50
             """, (route_id,))
             rows = cur.fetchall()
 
