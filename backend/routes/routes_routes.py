@@ -176,32 +176,38 @@ def create_route():
 @routes_bp.route("/<int:route_id>/cultural-items", methods=["GET"])
 def get_cultural_items(route_id):
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    ci.item_id, ci.title, ci.description,
+                    ci.latitude, ci.longitude, ci.period, ci.item_type, ci.source_url,
+                    rci.distance_m
+                FROM route_cultural_items rci
+                JOIN cultural_items ci ON ci.item_id = rci.item_id
+                WHERE rci.route_id = %s
+                ORDER BY rci.distance_m ASC NULLS LAST, ci.title ASC
+                LIMIT 200
+            """, (route_id,))
+            rows = cur.fetchall()
 
-    cur.execute("""
-        SELECT item_id, title, description, latitude, longitude, period, item_type
-        FROM cultural_items
-        WHERE route_id = %s
-        ORDER BY item_id ASC
-    """, (route_id,))
+        items = []
+        for r in rows:
+            items.append({
+                "item_id": r[0],
+                "title": r[1],
+                "description": r[2],
+                "latitude": float(r[3]),
+                "longitude": float(r[4]),
+                "period": r[5],
+                "item_type": r[6],
+                "source_url": r[7],
+                "distance_m": r[8],
+            })
 
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    items = []
-    for r in rows:
-        items.append({
-            "item_id": r[0],
-            "title": r[1],
-            "description": r[2],
-            "latitude": float(r[3]),
-            "longitude": float(r[4]),
-            "period": r[5],
-            "item_type": r[6],
-        })
-
-    return jsonify(items), 200
+        return jsonify(items), 200
+    finally:
+        conn.close()
 
 
 @cultural_bp.route("/cultural-items/near", methods=["GET"])
