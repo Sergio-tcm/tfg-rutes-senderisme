@@ -7,6 +7,96 @@ from services.geo_utils import haversine_m, bbox_for_radius
 
 route_cultural_bp = Blueprint("route_cultural", __name__, url_prefix="/routes")
 
+_ARCH_TYPES = {
+    "conjunt arquitectònic",
+    "edifici",
+    "element arquitectònic",
+    "element urbà",
+    "obra civil",
+}
+
+_ARCHAEO_TYPES = {
+    "jaciment arqueològic",
+    "jaciment paleontològic",
+}
+
+_NATURAL_TYPES = {
+    "espècimen botànic",
+    "zona d'interès",
+}
+
+_HIST_TYPES = {
+    "costumari",
+    "manifestació festiva",
+    "música i dansa",
+    "tradició oral",
+    "tècnica artesanal",
+    "fons bibliogràfic",
+    "fons d'imatges",
+    "fons documental",
+    "col·lecció",
+    "objecte",
+}
+
+
+def _normalize_type(t: str) -> str:
+    return (t or "").strip().lower()
+
+
+def _derive_route_booleans(types: list[str]):
+    has_arch = any(t in _ARCH_TYPES for t in types)
+    has_archaeo = any(t in _ARCHAEO_TYPES for t in types)
+    has_natural = any(t in _NATURAL_TYPES for t in types)
+
+    # Històric: si hi ha items culturals/documentals o qualsevol tipus no mapejat
+    has_hist = any(t in _HIST_TYPES for t in types) or any(
+        t and t not in _ARCH_TYPES and t not in _ARCHAEO_TYPES and t not in _NATURAL_TYPES
+        for t in types
+    )
+
+    return has_hist, has_archaeo, has_arch, has_natural
+
+
+def _sync_route_cultural_booleans(conn, route_id: int):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select ci.item_type
+            from route_cultural_items rci
+            join cultural_items ci on ci.item_id = rci.item_id
+            where rci.route_id = %s
+            """,
+            (route_id,),
+        )
+        rows = cur.fetchall()
+
+    types = [_normalize_type(r[0]) for r in rows if r and r[0] is not None]
+    has_hist, has_archaeo, has_arch, has_natural = _derive_route_booleans(types)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            update routes
+            set has_historical_value = %s,
+                has_archaeology = %s,
+                has_architecture = %s,
+                has_natural_interest = %s
+            where route_id = %s
+            """,
+            (has_hist, has_archaeo, has_arch, has_natural, route_id),
+        )
+
+
+@route_cultural_bp.post("/<int:route_id>/cultural-items/sync-booleans")
+def sync_route_cultural_booleans(route_id: int):
+    conn = get_connection()
+    try:
+        _sync_route_cultural_booleans(conn, route_id)
+        conn.commit()
+        return jsonify({"route_id": route_id, "status": "ok"}), 200
+    finally:
+        conn.close()
+
 def _get_gpx_url_for_route(conn, route_id: int):
     with conn.cursor() as cur:
         # Probamos primero file_path (tu esquema original)
@@ -117,6 +207,8 @@ def recompute_route_cultural_items(route_id: int):
 def list_route_cultural_items(route_id: int):
     conn = get_connection()
     try:
+        _sync_route_cultural_booleans(conn, route_id)
+        conn.commit()
         with conn.cursor() as cur:
             cur.execute("""
                 select

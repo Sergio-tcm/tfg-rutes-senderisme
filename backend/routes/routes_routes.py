@@ -4,6 +4,7 @@ from db import get_connection
 import math
 from utils.geo import haversine_m
 from services.difficulty_calculator import calculate_difficulty
+from routes.route_cultural_routes import _sync_route_cultural_booleans
 
 routes_bp = Blueprint("routes", __name__, url_prefix="/routes")
 
@@ -177,6 +178,8 @@ def create_route():
 def get_cultural_items(route_id):
     conn = get_connection()
     try:
+        _sync_route_cultural_booleans(conn, route_id)
+        conn.commit()
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
