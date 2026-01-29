@@ -285,13 +285,26 @@ def routes_for_cultural_item(item_id: int):
     limit = request.args.get("limit", default=5, type=int)
     radius_m = request.args.get("radius_m", default=1000, type=int)
     step = request.args.get("step", default=30, type=int)
+    max_routes = request.args.get("max_routes", default=60, type=int)
 
     limit = max(1, min(limit, 50))
     radius_m = max(50, min(radius_m, 20000))
     step = max(1, min(step, 200))
+    max_routes = max(10, min(max_routes, 200))
 
     conn = get_connection()
     cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cultural_item_routes_cache (
+            item_id INT NOT NULL,
+            radius_m INT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (item_id, radius_m)
+        )
+        """
+    )
 
     cur.execute(
         """
@@ -312,56 +325,86 @@ def routes_for_cultural_item(item_id: int):
 
     cur.execute(
         """
-        SELECT route_id
-        FROM route_cultural_items
-        WHERE item_id = %s
+        SELECT updated_at
+        FROM cultural_item_routes_cache
+        WHERE item_id = %s AND radius_m = %s
+          AND updated_at > NOW() - INTERVAL '6 hours'
         """,
-        (item_id,),
+        (item_id, radius_m),
     )
-    existing_route_ids = {int(r[0]) for r in cur.fetchall()}
+    cache_row = cur.fetchone()
 
-    cur.execute("SELECT route_id FROM routes")
-    route_ids = [int(r[0]) for r in cur.fetchall()]
+    if cache_row is None:
+        cur.execute(
+            """
+            SELECT route_id
+            FROM route_cultural_items
+            WHERE item_id = %s
+            """,
+            (item_id,),
+        )
+        existing_route_ids = {int(r[0]) for r in cur.fetchall()}
 
-    for route_id in route_ids:
-        if route_id in existing_route_ids:
-            continue
+        cur.execute(
+            """
+            SELECT r.route_id
+            FROM routes r
+            ORDER BY r.created_at DESC
+            LIMIT %s
+            """,
+            (max_routes,),
+        )
+        route_ids = [int(r[0]) for r in cur.fetchall()]
 
-        gpx_url = _get_gpx_url_for_route(conn, route_id)
-        if not gpx_url:
-            continue
-
-        try:
-            r = requests.get(gpx_url, timeout=12)
-            if r.status_code != 200:
+        for route_id in route_ids:
+            if route_id in existing_route_ids:
                 continue
 
-            points = parse_gpx_points(r.text)
-            if len(points) < 2:
+            gpx_url = _get_gpx_url_for_route(conn, route_id)
+            if not gpx_url:
                 continue
 
-            sampled = points[::step]
-            min_dist = None
-            for (lat, lon) in sampled:
-                d = haversine_m(item_lat, item_lon, float(lat), float(lon))
-                if min_dist is None or d < min_dist:
-                    min_dist = d
-                if min_dist <= 1:
-                    break
+            try:
+                r = requests.get(gpx_url, timeout=12)
+                if r.status_code != 200:
+                    continue
 
-            if min_dist is not None and min_dist <= radius_m:
-                cur.execute(
-                    """
-                    INSERT INTO route_cultural_items(route_id, item_id, distance_m)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (route_id, item_id) DO NOTHING
-                    """,
-                    (route_id, item_id, int(round(min_dist))),
-                )
-        except Exception:
-            continue
+                points = parse_gpx_points(r.text)
+                if len(points) < 2:
+                    continue
 
-    conn.commit()
+                sampled = points[::step]
+                min_dist = None
+                for (lat, lon) in sampled:
+                    d = haversine_m(item_lat, item_lon, float(lat), float(lon))
+                    if min_dist is None or d < min_dist:
+                        min_dist = d
+                    if min_dist <= 1:
+                        break
+
+                if min_dist is not None and min_dist <= radius_m:
+                    cur.execute(
+                        """
+                        INSERT INTO route_cultural_items(route_id, item_id, distance_m)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (route_id, item_id) DO NOTHING
+                        """,
+                        (route_id, item_id, int(round(min_dist))),
+                    )
+            except Exception:
+                continue
+
+        cur.execute(
+            """
+            INSERT INTO cultural_item_routes_cache(item_id, radius_m, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (item_id, radius_m)
+            DO UPDATE SET updated_at = NOW()
+            """,
+            (item_id, radius_m),
+        )
+
+        conn.commit()
 
     cur.execute(
         """
@@ -371,13 +414,14 @@ def routes_for_cultural_item(item_id: int):
           r.cultural_summary, r.has_historical_value, r.has_archaeology,
           r.has_architecture, r.has_natural_interest, r.created_at,
           rci.distance_m
-        FROM route_cultural_items rci
+                FROM route_cultural_items rci
         JOIN routes r ON r.route_id = rci.route_id
-        WHERE rci.item_id = %s
+                WHERE rci.item_id = %s
+                    AND rci.distance_m <= %s
         ORDER BY rci.distance_m ASC NULLS LAST, r.created_at DESC
         LIMIT %s
         """,
-        (item_id, limit),
+                (item_id, radius_m, limit),
     )
 
     rows = cur.fetchall()
