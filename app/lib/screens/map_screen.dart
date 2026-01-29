@@ -459,14 +459,14 @@ class _MapScreenState extends State<MapScreen> {
     if (distanceText != null) {
       trailingWidgets.add(
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.orange[600],
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             distanceText,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ),
       );
@@ -476,7 +476,10 @@ class _MapScreenState extends State<MapScreen> {
         IconButton(
           tooltip: 'Ruta passant pel punt',
           onPressed: _routingLoading ? null : onDetour,
-          icon: const Icon(Icons.alt_route, color: Colors.blue),
+          icon: const Icon(Icons.alt_route, color: Colors.blue, size: 20),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          visualDensity: VisualDensity.compact,
         ),
       );
     }
@@ -499,9 +502,14 @@ class _MapScreenState extends State<MapScreen> {
       ),
       trailing: trailingWidgets.isEmpty
           ? null
-          : Column(
+          : Row(
               mainAxisSize: MainAxisSize.min,
-              children: trailingWidgets,
+              children: [
+                for (var i = 0; i < trailingWidgets.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  trailingWidgets[i],
+                ],
+              ],
             ),
       onTap: () {
         Navigator.pop(context);
