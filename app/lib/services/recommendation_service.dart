@@ -9,6 +9,7 @@ class RecommendationService {
     required List<RouteModel> routes,
     required UserPreferencesModel prefs,
     int? maxDifficultyRank,
+    double culturalBoostWeight = 1.0,
   }) {
     if (routes.isEmpty) return [];
 
@@ -22,6 +23,7 @@ class RecommendationService {
         preferredDistance: preferredDistance,
         culturalInterest: cultural,
         maxDifficultyRank: maxDifficultyRank,
+        culturalBoostWeight: culturalBoostWeight,
       );
       return _ScoredRoute(route: r, score: score);
     }).toList();
@@ -41,8 +43,14 @@ class RecommendationService {
     required List<RouteModel> routes,
     required UserPreferencesModel prefs,
     int? maxDifficultyRank,
+    double culturalBoostWeight = 1.0,
   }) {
-    final ranked = rankRoutes(routes: routes, prefs: prefs, maxDifficultyRank: maxDifficultyRank);
+    final ranked = rankRoutes(
+      routes: routes,
+      prefs: prefs,
+      maxDifficultyRank: maxDifficultyRank,
+      culturalBoostWeight: culturalBoostWeight,
+    );
     if (ranked.isEmpty) return null;
     return ranked.first;
   }
@@ -52,6 +60,7 @@ class RecommendationService {
     required double preferredDistance,
     required String culturalInterest,
     required int? maxDifficultyRank,
+    required double culturalBoostWeight,
   }) {
     double score = 0;
 
@@ -72,31 +81,35 @@ class RecommendationService {
     }
 
     // C) Cultura (máx 20 puntos)
-    score += _culturalScore(r, culturalInterest);
+    score += _culturalScore(r, culturalInterest) * culturalBoostWeight;
 
     return score;
   }
 
   double _culturalScore(RouteModel r, String culturalInterest) {
-    // Si el usuario no ha indicado interés cultural, puntuación neutra.
-    if (culturalInterest.trim().isEmpty) return 0;
+    final interest = culturalInterest.trim().toLowerCase();
 
-    double score = 0;
+    // Valor cultural base: nº de booleanos true (0..4) -> 0..20
+    final count = [
+      r.hasHistoricalValue,
+      r.hasArchaeology,
+      r.hasArchitecture,
+      r.hasNaturalInterest,
+    ].where((v) => v).length;
 
-    // Interpretación simple por keywords en cultural_interest
-    // (cuando lo tengamos como tags, esto se refina)
-    final wantsHistory = culturalInterest.contains('hist') || culturalInterest.contains('historia');
-    final wantsArch = culturalInterest.contains('arqu') || culturalInterest.contains('arquitect');
-    final wantsArchaeo = culturalInterest.contains('arque') || culturalInterest.contains('arqueologia');
-    final wantsNature = culturalInterest.contains('natu') || culturalInterest.contains('natur');
+    final baseScore = (count / 4.0) * 20.0;
 
-    if (wantsHistory && r.hasHistoricalValue) score += 8;
-    if (wantsArchaeo && r.hasArchaeology) score += 8;
-    if (wantsArch && r.hasArchitecture) score += 8;
-    if (wantsNature && r.hasNaturalInterest) score += 8;
+    // Peso según interés cultural del usuario
+    double multiplier = 1.0;
+    if (interest.contains('baix') || interest.contains('baixa')) {
+      multiplier = 0.7;
+    } else if (interest.contains('alt') || interest.contains('alta')) {
+      multiplier = 1.4;
+    } else if (interest.contains('mitj') || interest.contains('mitja') || interest.contains('medio')) {
+      multiplier = 1.0;
+    }
 
-    // tope 20 para no dominar la decisión
-    return score.clamp(0, 20).toDouble();
+    return (baseScore * multiplier).clamp(0, 20).toDouble();
   }
 
   int _difficultyRank(String difficulty) {

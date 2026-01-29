@@ -161,6 +161,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
                 routes: filtered,
                 prefs: prefs,
                 maxDifficultyRank: _difficultyRank(_maxDifficulty),
+                culturalBoostWeight: _boostCulture ? 1.8 : 1.0,
               );
               final recommended = ranked.isEmpty ? null : ranked.first;
 
