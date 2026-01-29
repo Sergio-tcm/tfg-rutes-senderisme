@@ -10,6 +10,8 @@ def get_connection():
         # Para proveedores cloud suele hacer falta SSL
         if "sslmode=" not in db_url:
             db_url += ("&" if "?" in db_url else "?") + "sslmode=require"
+        if "connect_timeout=" not in db_url:
+            db_url += "&connect_timeout=10"
         return psycopg2.connect(db_url)
 
     return psycopg2.connect(
@@ -18,4 +20,5 @@ def get_connection():
         user=os.getenv("DB_USER", "postgres"),
         password=os.getenv("DB_PASSWORD", ""),
         port=os.getenv("DB_PORT", "5432"),
+        connect_timeout=10,
     )

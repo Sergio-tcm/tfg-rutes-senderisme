@@ -23,13 +23,17 @@ class AuthService {
       }),
     );
 
-    final data = jsonDecode(res.body);
+    final data = _safeJsonDecode(res.body);
 
     if (res.statusCode != 201) {
-      throw Exception(data['error'] ?? 'Error registrant usuari');
+      final msg = (data is Map && data['error'] != null)
+          ? data['error'].toString()
+          : 'Error registrant usuari';
+      throw Exception(msg);
     }
 
-    return data;
+    if (data is Map<String, dynamic>) return data;
+    return {};
   }
 
   Future<String> login({
@@ -44,13 +48,20 @@ class AuthService {
       body: jsonEncode({'email': email, 'password': password}),
     );
 
-    final data = jsonDecode(res.body);
+    final data = _safeJsonDecode(res.body);
 
     if (res.statusCode != 200) {
-      throw Exception(data['error'] ?? 'Credencials incorrectes');
+      final msg = (data is Map && data['error'] != null)
+          ? data['error'].toString()
+          : 'Credencials incorrectes';
+      throw Exception(msg);
     }
 
-    return data['access_token'] as String;
+    if (data is Map && data['access_token'] != null) {
+      return data['access_token'] as String;
+    }
+
+    throw Exception('Resposta del servidor no vàlida');
   }
 
   Future<Map<String, dynamic>> me() async {
@@ -66,12 +77,25 @@ class AuthService {
       headers: {'Authorization': 'Bearer $token'},
     );
 
-    final data = jsonDecode(res.body);
+    final data = _safeJsonDecode(res.body);
 
     if (res.statusCode != 200) {
-      throw Exception(data['error'] ?? 'Sessió no vàlida');
+      final msg = (data is Map && data['error'] != null)
+          ? data['error'].toString()
+          : 'Sessió no vàlida';
+      throw Exception(msg);
     }
 
-    return data;
+    if (data is Map<String, dynamic>) return data;
+    throw Exception('Resposta del servidor no vàlida');
+  }
+
+  dynamic _safeJsonDecode(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
   }
 }
