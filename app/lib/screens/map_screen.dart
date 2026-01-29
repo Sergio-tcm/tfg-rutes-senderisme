@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -101,7 +102,30 @@ class _MapScreenState extends State<MapScreen> {
     });
 
     try {
-      final pos = await _locationService.getCurrentPosition();
+      final lastKnown = await _locationService.getLastKnownPosition();
+      if (lastKnown != null && mounted) {
+        _currentPosition = LatLng(lastKnown.latitude, lastKnown.longitude);
+
+        final items = await _culturalNearService.near(
+          lat: lastKnown.latitude,
+          lon: lastKnown.longitude,
+          radius: _radiusM,
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _nearItems = items;
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _adjustZoomForRadius();
+        });
+
+        setState(() => _loading = false);
+      }
+
+      final pos = await _locationService.getCurrentPosition(accuracy: LocationAccuracy.medium);
       _currentPosition = LatLng(pos.latitude, pos.longitude);
 
       final items = await _culturalNearService.near(
@@ -110,11 +134,11 @@ class _MapScreenState extends State<MapScreen> {
         radius: _radiusM,
       );
 
+      if (!mounted) return;
       setState(() {
         _nearItems = items;
       });
 
-      // centra el mapa en tu posición
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _adjustZoomForRadius();

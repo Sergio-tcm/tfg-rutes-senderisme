@@ -286,11 +286,13 @@ def routes_for_cultural_item(item_id: int):
     radius_m = request.args.get("radius_m", default=1000, type=int)
     step = request.args.get("step", default=30, type=int)
     max_routes = request.args.get("max_routes", default=60, type=int)
+    max_cache_rows = request.args.get("max_cache_rows", default=2000, type=int)
 
     limit = max(1, min(limit, 50))
     radius_m = max(50, min(radius_m, 20000))
     step = max(1, min(step, 200))
     max_routes = max(10, min(max_routes, 200))
+    max_cache_rows = max(200, min(max_cache_rows, 10000))
 
     conn = get_connection()
     cur = conn.cursor()
@@ -403,6 +405,22 @@ def routes_for_cultural_item(item_id: int):
             """,
             (item_id, radius_m),
         )
+
+        cur.execute("SELECT COUNT(*) FROM cultural_item_routes_cache")
+        total_cache_rows = int(cur.fetchone()[0])
+        if total_cache_rows > max_cache_rows:
+            cur.execute(
+                """
+                DELETE FROM cultural_item_routes_cache
+                WHERE (item_id, radius_m) IN (
+                    SELECT item_id, radius_m
+                    FROM cultural_item_routes_cache
+                    ORDER BY updated_at ASC
+                    LIMIT %s
+                )
+                """,
+                (total_cache_rows - max_cache_rows,),
+            )
 
         conn.commit()
 

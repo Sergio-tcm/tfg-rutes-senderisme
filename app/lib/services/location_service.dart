@@ -1,7 +1,7 @@
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
-  Future<Position> getCurrentPosition() async {
+  Future<void> _ensurePermissions() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       throw Exception('Activa la ubicació del dispositiu');
@@ -17,10 +17,18 @@ class LocationService {
     if (permission == LocationPermission.deniedForever) {
       throw Exception('Permís de ubicació denegat permanentment');
     }
+  }
 
-    // Nuevo API (sin desiredAccuracy)
-    const settings = LocationSettings(
-      accuracy: LocationAccuracy.high,
+  Future<Position?> getLastKnownPosition() async {
+    await _ensurePermissions();
+    return Geolocator.getLastKnownPosition();
+  }
+
+  Future<Position> getCurrentPosition({LocationAccuracy accuracy = LocationAccuracy.high}) async {
+    await _ensurePermissions();
+
+    final settings = LocationSettings(
+      accuracy: accuracy,
     );
 
     return Geolocator.getCurrentPosition(locationSettings: settings);
