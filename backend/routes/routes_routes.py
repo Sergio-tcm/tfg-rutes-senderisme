@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
+import requests
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from db import get_connection
 import math
 from utils.geo import haversine_m
 from services.difficulty_calculator import calculate_difficulty
-from routes.route_cultural_routes import _sync_route_cultural_booleans
+from services.gpx_parser import parse_gpx_points
+from routes.route_cultural_routes import _sync_route_cultural_booleans, _get_gpx_url_for_route
 
 routes_bp = Blueprint("routes", __name__, url_prefix="/routes")
 
@@ -281,10 +283,85 @@ def cultural_items_near():
 @cultural_bp.route("/cultural-items/<int:item_id>/routes", methods=["GET"])
 def routes_for_cultural_item(item_id: int):
     limit = request.args.get("limit", default=5, type=int)
+    radius_m = request.args.get("radius_m", default=1000, type=int)
+    step = request.args.get("step", default=30, type=int)
+
     limit = max(1, min(limit, 50))
+    radius_m = max(50, min(radius_m, 20000))
+    step = max(1, min(step, 200))
 
     conn = get_connection()
     cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT latitude, longitude
+        FROM cultural_items
+        WHERE item_id = %s
+        """,
+        (item_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({"error": "Punt cultural no trobat"}), 404
+
+    item_lat = float(row[0])
+    item_lon = float(row[1])
+
+    cur.execute(
+        """
+        SELECT route_id
+        FROM route_cultural_items
+        WHERE item_id = %s
+        """,
+        (item_id,),
+    )
+    existing_route_ids = {int(r[0]) for r in cur.fetchall()}
+
+    cur.execute("SELECT route_id FROM routes")
+    route_ids = [int(r[0]) for r in cur.fetchall()]
+
+    for route_id in route_ids:
+        if route_id in existing_route_ids:
+            continue
+
+        gpx_url = _get_gpx_url_for_route(conn, route_id)
+        if not gpx_url:
+            continue
+
+        try:
+            r = requests.get(gpx_url, timeout=12)
+            if r.status_code != 200:
+                continue
+
+            points = parse_gpx_points(r.text)
+            if len(points) < 2:
+                continue
+
+            sampled = points[::step]
+            min_dist = None
+            for (lat, lon) in sampled:
+                d = haversine_m(item_lat, item_lon, float(lat), float(lon))
+                if min_dist is None or d < min_dist:
+                    min_dist = d
+                if min_dist <= 1:
+                    break
+
+            if min_dist is not None and min_dist <= radius_m:
+                cur.execute(
+                    """
+                    INSERT INTO route_cultural_items(route_id, item_id, distance_m)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (route_id, item_id) DO NOTHING
+                    """,
+                    (route_id, item_id, int(round(min_dist))),
+                )
+        except Exception:
+            continue
+
+    conn.commit()
 
     cur.execute(
         """
