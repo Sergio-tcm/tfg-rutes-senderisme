@@ -276,3 +276,65 @@ def cultural_items_near():
     # Ordena por cercanía
     out.sort(key=lambda x: x["distance_m"])
     return jsonify(out)
+
+
+@cultural_bp.route("/cultural-items/<int:item_id>/routes", methods=["GET"])
+def routes_for_cultural_item(item_id: int):
+    limit = request.args.get("limit", default=5, type=int)
+    limit = max(1, min(limit, 50))
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT
+          r.route_id, r.name, r.description, r.distance_km, r.difficulty,
+          r.elevation_gain, r.location, r.estimated_time, r.creator_id,
+          r.cultural_summary, r.has_historical_value, r.has_archaeology,
+          r.has_architecture, r.has_natural_interest, r.created_at,
+          rci.distance_m
+        FROM route_cultural_items rci
+        JOIN routes r ON r.route_id = rci.route_id
+        WHERE rci.item_id = %s
+        ORDER BY rci.distance_m ASC NULLS LAST, r.created_at DESC
+        LIMIT %s
+        """,
+        (item_id, limit),
+    )
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    routes = []
+    for r in rows:
+        distance_km = float(r[3] or 0)
+        elevation_gain = int(r[5] or 0)
+        estimated_time = r[7] or ""
+        difficulty_stored = r[4] or ""
+
+        computed_difficulty = calculate_difficulty(distance_km, elevation_gain, estimated_time, lang='ca')
+        stored_normalized = normalize_difficulty(difficulty_stored)
+        difficulty = computed_difficulty or stored_normalized
+
+        routes.append({
+            "route_id": r[0],
+            "name": r[1],
+            "description": r[2] or "",
+            "distance_km": distance_km,
+            "difficulty": difficulty,
+            "elevation_gain": elevation_gain,
+            "location": r[6] or "",
+            "estimated_time": estimated_time,
+            "creator_id": int(r[8]),
+            "cultural_summary": r[9] or "",
+            "has_historical_value": bool(r[10]),
+            "has_archaeology": bool(r[11]),
+            "has_architecture": bool(r[12]),
+            "has_natural_interest": bool(r[13]),
+            "created_at": r[14].isoformat() if r[14] else None,
+            "distance_m": float(r[15]) if r[15] is not None else None,
+        })
+
+    return jsonify(routes), 200
