@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/route_model.dart';
+import '../models/route_near_item.dart';
 import 'token_storage.dart';
 
 class RoutesService {
@@ -20,6 +21,35 @@ class RoutesService {
     }
 
     return body.map<RouteModel>((e) => RouteModel.fromJson(e)).toList();
+  }
+
+  Future<List<RouteNearItem>> getRoutesNearCulturalItem(
+    int itemId, {
+    int limit = 5,
+    int? radiusM,
+    int? step,
+  }) async {
+    final queryParameters = {
+      'limit': limit.toString(),
+      if (radiusM != null) 'radius_m': radiusM.toString(),
+      if (step != null) 'step': step.toString(),
+    };
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/cultural-items/$itemId/routes')
+        .replace(queryParameters: queryParameters);
+
+    final res = await http.get(url);
+
+    if (res.statusCode != 200) {
+      throw Exception('Error carregant rutes associades');
+    }
+
+    final body = jsonDecode(res.body);
+    if (body is! List) {
+      throw Exception('Resposta inesperada del servidor');
+    }
+
+    return body.map<RouteNearItem>((e) => RouteNearItem.fromJson(e)).toList();
   }
 
   /// Crear ruta (requiere JWT)

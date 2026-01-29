@@ -15,6 +15,12 @@ import '../services/route_files_service.dart';
 import '../services/gpx_download_service.dart';
 import '../services/gpx_points_parser.dart';
 import '../services/routing_service.dart';
+import '../services/routes_service.dart';
+import '../services/user_preferences_service.dart';
+import '../services/recommendation_service.dart';
+import '../models/route_near_item.dart';
+import '../models/user_preferences_model.dart';
+import 'route_detail_screen.dart';
 
 class MapScreen extends StatefulWidget {
   final int? routeId;
@@ -38,6 +44,9 @@ class _MapScreenState extends State<MapScreen> {
   final _culturalNearService = CulturalNearService();
   final _culturalItemsService = CulturalItemsService();
   final _routingService = RoutingService();
+  final _routesService = RoutesService();
+  final _prefsService = UserPreferencesService();
+  final _recoService = RecommendationService();
 
   bool _loading = false;
   String? _error;
@@ -368,6 +377,109 @@ class _MapScreenState extends State<MapScreen> {
     return '${clean.substring(0, max)}…';
   }
 
+  UserPreferencesModel _prefsFromApi(Map<String, dynamic> data) {
+    if (data.isEmpty) {
+      return const UserPreferencesModel(
+        prefId: 0,
+        userId: 0,
+        preferredDistance: 10,
+        environmentType: 'mixt',
+        culturalInterest: 'mitja',
+        updatedAt: null,
+      );
+    }
+    return UserPreferencesModel.fromJson(data);
+  }
+
+  Future<_NearRoutesData> _loadNearRoutesData(CulturalItem item) async {
+    final routes = await _routesService.getRoutesNearCulturalItem(
+      item.id,
+      limit: 5,
+      radiusM: _radiusM,
+    );
+
+    if (routes.isEmpty) {
+      return _NearRoutesData(routes: routes, recommendedRouteId: null);
+    }
+
+    try {
+      final prefsMap = await _prefsService.getPreferences();
+      final prefs = _prefsFromApi(prefsMap);
+      final ranked = _recoService.rankRoutes(
+        routes: routes.map((e) => e.route).toList(),
+        prefs: prefs,
+      );
+      final recommendedId = ranked.isEmpty ? null : ranked.first.routeId;
+      return _NearRoutesData(routes: routes, recommendedRouteId: recommendedId);
+    } catch (_) {
+      return _NearRoutesData(routes: routes, recommendedRouteId: null);
+    }
+  }
+
+  String _formatDistanceM(double meters) {
+    if (meters >= 1000) {
+      return '${(meters / 1000).toStringAsFixed(1)} km';
+    }
+    return '${meters.toStringAsFixed(0)} m';
+  }
+
+  Widget _buildNearRouteTile(RouteNearItem item, {bool isRecommended = false}) {
+    final route = item.route;
+    final distanceText = item.distanceM != null ? _formatDistanceM(item.distanceM!) : null;
+
+    final tile = ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        route.name,
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: isRecommended ? Colors.orange[900] : Colors.green[900],
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        '${route.distanceKm.toStringAsFixed(1)} km · ${route.difficulty} · ${route.location}',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: distanceText == null
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange[600],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                distanceText,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+      onTap: () {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RouteDetailScreen(route: route),
+          ),
+        );
+      },
+    );
+
+    if (!isRecommended) return tile;
+
+    return Card(
+      elevation: 3,
+      color: Colors.orange[50],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: tile,
+      ),
+    );
+  }
+
   Future<void> _openUrl(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
@@ -438,6 +550,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _showCulturalItem(CulturalItem item) {
+    final isRouteMode = widget.routeId != null;
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -451,12 +564,17 @@ class _MapScreenState extends State<MapScreen> {
               colors: [Colors.green[50]!, Colors.white],
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxHeight = MediaQuery.of(context).size.height * 0.85;
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 Card(
                   elevation: 4,
                   shape: RoundedRectangleBorder(
@@ -547,7 +665,92 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                  if (!isRouteMode) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Rutes properes',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.green[900]),
+                    ),
+                    const SizedBox(height: 8),
+                    FutureBuilder<_NearRoutesData>(
+                      future: _loadNearRoutesData(item),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('No s\'han pogut carregar les rutes properes', style: TextStyle(color: Colors.red)),
+                          );
+                        }
+
+                        final data = snapshot.data ?? const _NearRoutesData(routes: [], recommendedRouteId: null);
+                        final routes = data.routes;
+                        final recommendedId = data.recommendedRouteId;
+                        if (routes.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('No hi ha rutes associades a aquest punt.'),
+                          );
+                        }
+
+                        final recommendedItem = recommendedId == null
+                            ? null
+                            : routes.firstWhere(
+                                (r) => r.route.routeId == recommendedId,
+                                orElse: () => routes.first,
+                              );
+
+                        final others = recommendedItem == null
+                            ? routes
+                            : routes.where((r) => r.route.routeId != recommendedItem.route.routeId).toList();
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (recommendedItem != null) ...[
+                              Row(
+                                children: [
+                                  Icon(Icons.star, color: Colors.orange[700]),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Recomanada per tu',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.orange[800],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              _buildNearRouteTile(recommendedItem, isRecommended: true),
+                              const SizedBox(height: 12),
+                            ],
+                            if (others.isNotEmpty) ...[
+                              Text(
+                                recommendedItem == null ? 'Rutes properes' : 'Altres rutes properes',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.green[900]),
+                              ),
+                              const SizedBox(height: 6),
+                              ...others.map((r) => Column(
+                                    children: [
+                                      _buildNearRouteTile(r),
+                                      const Divider(height: 1),
+                                    ],
+                                  )),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+
+                  const SizedBox(height: 16),
 
                 Row(
                   children: [
@@ -624,8 +827,11 @@ class _MapScreenState extends State<MapScreen> {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(_routingError!, style: const TextStyle(color: Colors.red, fontSize: 16)),
                   ),
-              ],
-            ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         );
       },
@@ -943,4 +1149,14 @@ class _MapScreenState extends State<MapScreen> {
       setState(() => _loading = false);
     }
   }
+}
+
+class _NearRoutesData {
+  final List<RouteNearItem> routes;
+  final int? recommendedRouteId;
+
+  const _NearRoutesData({
+    required this.routes,
+    required this.recommendedRouteId,
+  });
 }
