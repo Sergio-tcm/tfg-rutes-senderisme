@@ -17,7 +17,6 @@ def walking_route():
     start_lon = request.args.get("start_lon", type=float)
     end_lat = request.args.get("end_lat", type=float)
     end_lon = request.args.get("end_lon", type=float)
-    speed_kmh = request.args.get("speed_kmh", default=4.5, type=float)
 
     # 2) Validar
     missing = [k for k, v in {
@@ -29,8 +28,6 @@ def walking_route():
 
     if missing:
         return jsonify({"error": f"Falten paràmetres: {', '.join(missing)}"}), 400
-
-    speed_kmh = max(3.0, min(speed_kmh, 6.5))
 
     # 3) OSRM pide coords en orden lon,lat
     coords = f"{start_lon},{start_lat};{end_lon},{end_lat}"
@@ -77,7 +74,7 @@ def walking_route():
                 return 'Pont'
             if any(word in name for word in ['parc', 'jardí', 'park', 'garden', 'bosque', 'forest']):
                 return 'Parc'
-            return None
+            return 'Altres' if name else None
 
         steps = []
         seen = set()
@@ -89,11 +86,9 @@ def walking_route():
                     steps.append(road_type)
                     seen.add(road_type)
 
-        distance_km = round(distance_m / 1000.0, 2)
-        duration_min = int(round((distance_km / speed_kmh) * 60.0))
         return jsonify({
-            "distance_km": distance_km,
-            "duration_min": duration_min,
+            "distance_km": round(distance_m / 1000.0, 2),
+            "duration_min": int(round(duration_s / 60.0)),
             "polyline": polyline,
             "steps": steps,
         }), 200
