@@ -45,7 +45,7 @@ def normalize_difficulty(difficulty: str) -> str:
 
 def _osrm_walking_route(start_lat: float, start_lon: float, end_lat: float, end_lon: float):
     coords = f"{start_lon},{start_lat};{end_lon},{end_lat}"
-    url = f"{OSRM_BASE_URL}/route/v1/foot/{coords}"
+    url = f"{OSRM_BASE_URL}/route/v1/walking/{coords}"
 
     r = requests.get(
         url,
@@ -53,7 +53,6 @@ def _osrm_walking_route(start_lat: float, start_lon: float, end_lat: float, end_
             "overview": "full",
             "geometries": "geojson",
             "steps": "false",
-            "continue_straight": "true",
         },
         timeout=12,
     )

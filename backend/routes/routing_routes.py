@@ -35,10 +35,10 @@ def walking_route():
     # 3) OSRM pide coords en orden lon,lat
     coords = f"{start_lon},{start_lat};{end_lon},{end_lat}"
 
-    # 4) Endpoint OSRM: /route/v1/foot/{coords}
+    # 4) Endpoint OSRM: /route/v1/walking/{coords}
     # overview=full -> geometría completa
     # geometries=geojson -> coordenadas como GeoJSON [lon, lat]
-    url = f"{OSRM_BASE_URL}/route/v1/foot/{coords}"
+    url = f"{OSRM_BASE_URL}/route/v1/walking/{coords}"
 
     try:
         r = requests.get(
@@ -47,7 +47,6 @@ def walking_route():
                 "overview": "full",
                 "geometries": "geojson",
                 "steps": "true",
-                "continue_straight": "true",
             },
             timeout=12,
         )
