@@ -65,7 +65,7 @@ class RoutingService {
       '?start_lat=$startLat&start_lon=$startLon&item_id=$itemId&step=$step',
     );
 
-    final res = await http.get(uri);
+    final res = await http.get(uri).timeout(const Duration(seconds: 20));
 
     if (res.statusCode != 200) {
       throw Exception('Error calculant ruta (${res.statusCode})');
