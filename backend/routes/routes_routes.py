@@ -555,7 +555,6 @@ def route_via_cultural_item(route_id: int):
     start_lon = request.args.get("start_lon", type=float)
     item_id = request.args.get("item_id", type=int)
     step = request.args.get("step", default=10, type=int)
-    speed_kmh = request.args.get("speed_kmh", default=4.5, type=float)
 
     missing = [k for k, v in {
         "start_lat": start_lat,
@@ -566,7 +565,6 @@ def route_via_cultural_item(route_id: int):
         return jsonify({"error": f"Falten paràmetres: {', '.join(missing)}"}), 400
 
     step = max(1, min(step, 50))
-    speed_kmh = max(3.0, min(speed_kmh, 6.5))
 
     conn = get_connection()
     try:
@@ -636,7 +634,8 @@ def route_via_cultural_item(route_id: int):
 
         segment_distance_km = _segment_distance_km(seg_points)
         total_distance_km = round(leg1["distance_km"] + segment_distance_km + leg2["distance_km"], 2)
-        total_duration_min = int(round((total_distance_km / speed_kmh) * 60.0))
+        segment_duration_min = int(round((segment_distance_km / 5.0) * 60.0))  # 5 km/h
+        total_duration_min = int(leg1["duration_min"] + segment_duration_min + leg2["duration_min"])
 
         return jsonify({
             "distance_km": total_distance_km,
