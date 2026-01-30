@@ -447,39 +447,9 @@ class _MapScreenState extends State<MapScreen> {
     return '${meters.toStringAsFixed(0)} m';
   }
 
-  Widget _buildNearRouteTile(
-    RouteNearItem item, {
-    bool isRecommended = false,
-    VoidCallback? onDetour,
-  }) {
+  Widget _buildNearRouteTile(RouteNearItem item, {bool isRecommended = false}) {
     final route = item.route;
     final distanceText = item.distanceM != null ? _formatDistanceM(item.distanceM!) : null;
-
-    final trailingWidgets = <Widget>[];
-    if (distanceText != null) {
-      trailingWidgets.add(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.orange[600],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            distanceText,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ),
-      );
-    }
-    if (onDetour != null) {
-      trailingWidgets.add(
-        IconButton(
-          tooltip: 'Ruta passant pel punt',
-          onPressed: _routingLoading ? null : onDetour,
-          icon: const Icon(Icons.alt_route, color: Colors.blue),
-        ),
-      );
-    }
 
     final tile = ListTile(
       contentPadding: EdgeInsets.zero,
@@ -497,11 +467,18 @@ class _MapScreenState extends State<MapScreen> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: trailingWidgets.isEmpty
+      trailing: distanceText == null
           ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: trailingWidgets,
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange[600],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                distanceText,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
             ),
       onTap: () {
         Navigator.pop(context);
@@ -591,54 +568,6 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _routingError = e.toString().replaceFirst('Exception: ', '');
       });
-    } finally {
-      setState(() => _routingLoading = false);
-    }
-  }
-
-  Future<void> _routeViaCulturalPoint(RouteNearItem routeItem, CulturalItem culturalItem) async {
-    setState(() {
-      _routingLoading = true;
-      _routingError = null;
-    });
-
-    try {
-      final pos = await _locationService.getCurrentPosition(accuracy: LocationAccuracy.medium);
-
-      final result = await _routingService.routeViaCulturalItem(
-        routeId: routeItem.route.routeId,
-        itemId: culturalItem.id,
-        startLat: pos.latitude,
-        startLon: pos.longitude,
-      );
-
-      final pts = result.polyline
-          .map((p) => LatLng(p[0], p[1]))
-          .toList();
-
-      setState(() {
-        _walkingTrack = pts;
-        _walkingDistanceKm = result.distanceKm;
-        _walkingDurationMin = result.durationMin;
-        _currentDestination = culturalItem;
-        _walkingSteps = result.steps;
-      });
-
-      if (pts.length >= 2) {
-        final bounds = LatLngBounds.fromPoints(pts);
-        _mapController.fitCamera(
-          CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _routingError = e.toString().replaceFirst('Exception: ', '');
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_routingError ?? 'Error calculant ruta')),
-      );
     } finally {
       setState(() => _routingLoading = false);
     }
@@ -823,14 +752,7 @@ class _MapScreenState extends State<MapScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              _buildNearRouteTile(
-                                recommendedItem,
-                                isRecommended: true,
-                                onDetour: () {
-                                  Navigator.pop(context);
-                                  _routeViaCulturalPoint(recommendedItem, item);
-                                },
-                              ),
+                              _buildNearRouteTile(recommendedItem, isRecommended: true),
                               const SizedBox(height: 12),
                             ],
                             if (others.isNotEmpty) ...[
@@ -841,13 +763,7 @@ class _MapScreenState extends State<MapScreen> {
                               const SizedBox(height: 6),
                               ...others.map((r) => Column(
                                     children: [
-                                      _buildNearRouteTile(
-                                        r,
-                                        onDetour: () {
-                                          Navigator.pop(context);
-                                          _routeViaCulturalPoint(r, item);
-                                        },
-                                      ),
+                                      _buildNearRouteTile(r),
                                       const Divider(height: 1),
                                     ],
                                   )),

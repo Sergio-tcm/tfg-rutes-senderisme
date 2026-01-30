@@ -52,25 +52,4 @@ class RoutingService {
 
     return RoutingResult.fromJson(jsonDecode(res.body));
   }
-
-  Future<RoutingResult> routeViaCulturalItem({
-    required int routeId,
-    required int itemId,
-    required double startLat,
-    required double startLon,
-    int step = 10,
-  }) async {
-    final uri = Uri.parse(
-      '${ApiConfig.baseUrl}/routes/$routeId/via-cultural-item'
-      '?start_lat=$startLat&start_lon=$startLon&item_id=$itemId&step=$step',
-    );
-
-    final res = await http.get(uri);
-
-    if (res.statusCode != 200) {
-      throw Exception('Error calculant ruta (${res.statusCode})');
-    }
-
-    return RoutingResult.fromJson(jsonDecode(res.body));
-  }
 }
