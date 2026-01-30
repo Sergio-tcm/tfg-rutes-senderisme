@@ -45,51 +45,34 @@ def normalize_difficulty(difficulty: str) -> str:
 
 def _osrm_walking_route(start_lat: float, start_lon: float, end_lat: float, end_lon: float):
     coords = f"{start_lon},{start_lat};{end_lon},{end_lat}"
+    url = f"{OSRM_BASE_URL}/route/v1/foot/{coords}"
 
-    def _request(profile: str):
-        url = f"{OSRM_BASE_URL}/route/v1/{profile}/{coords}"
-        r = requests.get(
-            url,
-            params={
-                "overview": "full",
-                "geometries": "geojson",
-                "steps": "false",
-                "continue_straight": "true",
-            },
-            timeout=12,
-        )
-        r.raise_for_status()
-        return r.json()
+    r = requests.get(
+        url,
+        params={
+            "overview": "full",
+            "geometries": "geojson",
+            "steps": "false",
+            "continue_straight": "true",
+        },
+        timeout=12,
+    )
+    r.raise_for_status()
+    data = r.json()
 
-    try:
-        for profile in ("foot", "walking"):
-            data = _request(profile)
-            if data.get("code") == "Ok" and data.get("routes"):
-                route = data["routes"][0]
-                distance_m = float(route.get("distance", 0.0))
-                duration_s = float(route.get("duration", 0.0))
+    if data.get("code") != "Ok" or not data.get("routes"):
+        raise Exception("No s'ha pogut calcular la ruta")
 
-                coords_geo = route["geometry"]["coordinates"]
-                polyline = [[float(lat), float(lon)] for lon, lat in coords_geo]
+    route = data["routes"][0]
+    distance_m = float(route.get("distance", 0.0))
+    duration_s = float(route.get("duration", 0.0))
 
-                return {
-                    "distance_km": round(distance_m / 1000.0, 2),
-                    "duration_min": int(round(duration_s / 60.0)),
-                    "polyline": polyline,
-                    "steps": [],
-                }
-    except requests.RequestException:
-        pass
-
-    # Fallback: straight line
-    distance_m = haversine_m(start_lat, start_lon, end_lat, end_lon)
-    distance_km = round(distance_m / 1000.0, 2)
-    duration_min = int(round((distance_km / 4.5) * 60.0))
-    polyline = [[float(start_lat), float(start_lon)], [float(end_lat), float(end_lon)]]
+    coords_geo = route["geometry"]["coordinates"]
+    polyline = [[float(lat), float(lon)] for lon, lat in coords_geo]
 
     return {
-        "distance_km": distance_km,
-        "duration_min": duration_min,
+        "distance_km": round(distance_m / 1000.0, 2),
+        "duration_min": int(round(duration_s / 60.0)),
         "polyline": polyline,
         "steps": [],
     }
