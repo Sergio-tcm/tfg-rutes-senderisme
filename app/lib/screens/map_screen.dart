@@ -65,6 +65,8 @@ class _MapScreenState extends State<MapScreen> {
   CulturalItem? _currentDestination;
   List<String> _walkingSteps = const [];
 
+  final Map<int, List<LatLng>> _routeTrackCache = {};
+
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
   static const double _defaultZoom = 12;
@@ -447,9 +449,42 @@ class _MapScreenState extends State<MapScreen> {
     return '${meters.toStringAsFixed(0)} m';
   }
 
-  Widget _buildNearRouteTile(RouteNearItem item, {bool isRecommended = false}) {
+  Widget _buildNearRouteTile(
+    RouteNearItem item, {
+    bool isRecommended = false,
+    VoidCallback? onRouteStart,
+  }) {
     final route = item.route;
     final distanceText = item.distanceM != null ? _formatDistanceM(item.distanceM!) : null;
+
+    final trailingWidgets = <Widget>[];
+    if (distanceText != null) {
+      trailingWidgets.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.orange[600],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            distanceText,
+            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+    if (onRouteStart != null) {
+      trailingWidgets.add(
+        IconButton(
+          tooltip: 'Anar a l\'inici',
+          onPressed: _routingLoading ? null : onRouteStart,
+          icon: const Icon(Icons.directions_walk, color: Colors.blue, size: 20),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          visualDensity: VisualDensity.compact,
+        ),
+      );
+    }
 
     final tile = ListTile(
       contentPadding: EdgeInsets.zero,
@@ -467,18 +502,16 @@ class _MapScreenState extends State<MapScreen> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: distanceText == null
+      trailing: trailingWidgets.isEmpty
           ? null
-          : Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.orange[600],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                distanceText,
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-              ),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < trailingWidgets.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  trailingWidgets[i],
+                ],
+              ],
             ),
       onTap: () {
         Navigator.pop(context);
@@ -518,6 +551,61 @@ class _MapScreenState extends State<MapScreen> {
     return meters / metersPerPixel;
   }
 
+  double _haversineKm(LatLng a, LatLng b) {
+    const r = 6371.0;
+    final dLat = (b.latitude - a.latitude) * pi / 180.0;
+    final dLon = (b.longitude - a.longitude) * pi / 180.0;
+    final lat1 = a.latitude * pi / 180.0;
+    final lat2 = b.latitude * pi / 180.0;
+
+    final h = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1) * cos(lat2) *
+            sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(h), sqrt(1 - h));
+    return r * c;
+  }
+
+  double _trackDistanceKm(List<LatLng> points) {
+    if (points.length < 2) return 0.0;
+    var total = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      total += _haversineKm(points[i - 1], points[i]);
+    }
+    return total;
+  }
+
+  Future<List<LatLng>> _getRouteTrackPoints(int routeId) async {
+    final cached = _routeTrackCache[routeId];
+    if (cached != null && cached.isNotEmpty) return cached;
+
+    final files = await _routeFilesService.listFiles(routeId);
+    if (files.isEmpty) {
+      throw Exception('Aquesta ruta no té cap GPX');
+    }
+
+    String? gpxUrl;
+    for (final f in files) {
+      final type = (f['file_type'] ?? '').toString().toUpperCase();
+      if (type == 'GPX') {
+        gpxUrl = f['file_url']?.toString();
+        break;
+      }
+    }
+    gpxUrl ??= files.first['file_url']?.toString();
+    if (gpxUrl == null || gpxUrl.isEmpty) {
+      throw Exception('No s\'ha trobat cap GPX');
+    }
+
+    final gpx = await _downloadService.download(gpxUrl);
+    final points = _pointsParser.parsePoints(gpx);
+    if (points.length < 2) {
+      throw Exception('GPX sense punts suficients');
+    }
+
+    _routeTrackCache[routeId] = points;
+    return points;
+  }
+
   void _adjustZoomForRadius() {
     if (_currentPosition == null) return;
     final screenSize = MediaQuery.of(context).size;
@@ -534,6 +622,12 @@ class _MapScreenState extends State<MapScreen> {
       _routingLoading = true;
       _routingError = null;
     });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Calculant ruta...')),
+      );
+    }
 
     try {
       final pos = await _locationService.getCurrentPosition();
@@ -554,7 +648,7 @@ class _MapScreenState extends State<MapScreen> {
         _walkingDistanceKm = result.distanceKm;
         _walkingDurationMin = result.durationMin;
         _currentDestination = item;
-        _walkingSteps = result.steps;
+        _walkingSteps = result.steps.where((s) => s.toLowerCase() != 'altres').toList();
       });
 
       // Opcional: encuadrar la ruta en pantalla
@@ -570,6 +664,83 @@ class _MapScreenState extends State<MapScreen> {
       });
     } finally {
       setState(() => _routingLoading = false);
+    }
+  }
+
+  Future<void> _routeToRouteStart(RouteNearItem item) async {
+    if (!mounted) return;
+    setState(() {
+      _routingLoading = true;
+      _routingError = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Calculant ruta...')),
+    );
+
+    try {
+      final pos = await _locationService.getCurrentPosition();
+      final track = await _getRouteTrackPoints(item.route.routeId);
+
+      final start = track.first;
+      final walking = await _routingService.walkingRoute(
+        startLat: pos.latitude,
+        startLon: pos.longitude,
+        endLat: start.latitude,
+        endLon: start.longitude,
+      );
+
+      final walkingPts = walking.polyline
+          .map((p) => LatLng(p[0], p[1]))
+          .toList();
+
+      final routeDistanceKm = _trackDistanceKm(track);
+      final totalDistanceKm = walking.distanceKm + routeDistanceKm;
+      final totalDurationMin = walking.durationMin + ((routeDistanceKm / 4.5) * 60).round();
+
+      if (!mounted) return;
+      setState(() {
+        _track = track;
+        _walkingTrack = walkingPts;
+        _walkingDistanceKm = totalDistanceKm;
+        _walkingDurationMin = totalDurationMin;
+        _walkingSteps = walking.steps.where((s) => s.toLowerCase() != 'altres').toList();
+        _currentDestination = null;
+      });
+
+      final allPoints = <LatLng>[];
+      allPoints.addAll(walkingPts);
+      allPoints.addAll(track);
+      if (allPoints.length >= 2) {
+        final bounds = LatLngBounds.fromPoints(allPoints);
+        _mapController.fitCamera(
+          CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Ruta total: ${totalDistanceKm.toStringAsFixed(2)} km · $totalDurationMin min',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        _routingError = msg;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg.isEmpty ? 'Error calculant ruta' : msg)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _routingLoading = false);
+      }
     }
   }
 
@@ -752,7 +923,14 @@ class _MapScreenState extends State<MapScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              _buildNearRouteTile(recommendedItem, isRecommended: true),
+                              _buildNearRouteTile(
+                                recommendedItem,
+                                isRecommended: true,
+                                onRouteStart: () {
+                                  Navigator.pop(context);
+                                  Future.microtask(() => _routeToRouteStart(recommendedItem));
+                                },
+                              ),
                               const SizedBox(height: 12),
                             ],
                             if (others.isNotEmpty) ...[
@@ -763,7 +941,13 @@ class _MapScreenState extends State<MapScreen> {
                               const SizedBox(height: 6),
                               ...others.map((r) => Column(
                                     children: [
-                                      _buildNearRouteTile(r),
+                                      _buildNearRouteTile(
+                                        r,
+                                        onRouteStart: () {
+                                          Navigator.pop(context);
+                                          Future.microtask(() => _routeToRouteStart(r));
+                                        },
+                                      ),
                                       const Divider(height: 1),
                                     ],
                                   )),
@@ -872,6 +1056,7 @@ class _MapScreenState extends State<MapScreen> {
             Polyline(
               points: _track,
               strokeWidth: 4.0,
+              color: Colors.green,
             ),
           ];
 
@@ -976,7 +1161,12 @@ class _MapScreenState extends State<MapScreen> {
               // markers culturales
               if (_nearItems.isNotEmpty)
                 MarkerLayer(
-                  markers: _nearItems.where((item) => _walkingTrack.isEmpty || item == _currentDestination).map((item) {
+                    markers: _nearItems
+                      .where((item) =>
+                        _walkingTrack.isEmpty ||
+                        _currentDestination == null ||
+                        item.id == _currentDestination!.id)
+                      .map((item) {
                     return Marker(
                       point: LatLng(item.latitude, item.longitude),
                       width: 44,
@@ -1078,6 +1268,9 @@ class _MapScreenState extends State<MapScreen> {
                           TextButton(
                             onPressed: () {
                               setState(() {
+                                if (widget.routeId == null) {
+                                  _track = const [];
+                                }
                                 _walkingTrack = const [];
                                 _walkingDistanceKm = null;
                                 _walkingDurationMin = null;
