@@ -66,6 +66,7 @@ class _MapScreenState extends State<MapScreen> {
   List<String> _walkingSteps = const [];
 
   final Map<int, List<LatLng>> _routeTrackCache = {};
+  final List<int> _routeTrackCacheOrder = [];
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -103,8 +104,9 @@ class _MapScreenState extends State<MapScreen> {
       _track = const [];
     });
 
+    Position? lastKnown;
     try {
-      final lastKnown = await _locationService.getLastKnownPosition();
+      lastKnown = await _locationService.getLastKnownPosition();
       if (lastKnown != null && mounted) {
         _currentPosition = LatLng(lastKnown.latitude, lastKnown.longitude);
 
@@ -127,7 +129,10 @@ class _MapScreenState extends State<MapScreen> {
         setState(() => _loading = false);
       }
 
-      final pos = await _locationService.getCurrentPosition(accuracy: LocationAccuracy.medium);
+      final pos = await _locationService.getCurrentPosition(
+        accuracy: LocationAccuracy.medium,
+        timeout: const Duration(seconds: 8),
+      );
       _currentPosition = LatLng(pos.latitude, pos.longitude);
 
       final items = await _culturalNearService.near(
@@ -146,9 +151,11 @@ class _MapScreenState extends State<MapScreen> {
         _adjustZoomForRadius();
       });
     } catch (e) {
+      if (lastKnown == null) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -574,6 +581,19 @@ class _MapScreenState extends State<MapScreen> {
     return total;
   }
 
+  List<LatLng> _downsamplePoints(List<LatLng> points, {int maxPoints = 1200}) {
+    if (maxPoints <= 1 || points.length <= maxPoints) return points;
+    final step = (points.length / maxPoints).ceil();
+    final sampled = <LatLng>[];
+    for (var i = 0; i < points.length; i += step) {
+      sampled.add(points[i]);
+    }
+    if (sampled.isEmpty || sampled.last != points.last) {
+      sampled.add(points.last);
+    }
+    return sampled;
+  }
+
   Future<List<LatLng>> _getRouteTrackPoints(int routeId) async {
     final cached = _routeTrackCache[routeId];
     if (cached != null && cached.isNotEmpty) return cached;
@@ -597,12 +617,19 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     final gpx = await _downloadService.download(gpxUrl);
-    final points = _pointsParser.parsePoints(gpx);
+    final points = await _pointsParser.parsePointsAsync(gpx, maxPoints: 2500);
     if (points.length < 2) {
       throw Exception('GPX sense punts suficients');
     }
 
     _routeTrackCache[routeId] = points;
+    _routeTrackCacheOrder.remove(routeId);
+    _routeTrackCacheOrder.add(routeId);
+    if (_routeTrackCacheOrder.length > 5) {
+      final toRemove = _routeTrackCacheOrder.removeAt(0);
+      _routeTrackCache.remove(toRemove);
+    }
+
     return points;
   }
 
@@ -639,9 +666,10 @@ class _MapScreenState extends State<MapScreen> {
         endLon: item.longitude,
       );
 
-      final pts = result.polyline
-          .map((p) => LatLng(p[0], p[1]))
-          .toList();
+      final pts = _downsamplePoints(
+        result.polyline.map((p) => LatLng(p[0], p[1])).toList(),
+        maxPoints: 1000,
+      );
 
       setState(() {
         _walkingTrack = pts;
@@ -690,9 +718,10 @@ class _MapScreenState extends State<MapScreen> {
         endLon: start.longitude,
       );
 
-      final walkingPts = walking.polyline
-          .map((p) => LatLng(p[0], p[1]))
-          .toList();
+      final walkingPts = _downsamplePoints(
+        walking.polyline.map((p) => LatLng(p[0], p[1])).toList(),
+        maxPoints: 1000,
+      );
 
       final routeDistanceKm = _trackDistanceKm(track);
       final totalDistanceKm = walking.distanceKm + routeDistanceKm;

@@ -24,13 +24,19 @@ class LocationService {
     return Geolocator.getLastKnownPosition();
   }
 
-  Future<Position> getCurrentPosition({LocationAccuracy accuracy = LocationAccuracy.high}) async {
+  Future<Position> getCurrentPosition({
+    LocationAccuracy accuracy = LocationAccuracy.high,
+    Duration? timeout,
+  }) async {
     await _ensurePermissions();
 
     final settings = LocationSettings(
       accuracy: accuracy,
+      timeLimit: timeout,
     );
 
-    return Geolocator.getCurrentPosition(locationSettings: settings);
+    return Geolocator.getCurrentPosition(
+      locationSettings: settings,
+    );
   }
 }
