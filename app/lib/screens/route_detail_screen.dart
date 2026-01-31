@@ -1,17 +1,124 @@
 import 'package:app/screens/map_screen.dart';
 import 'package:flutter/material.dart';
 import '../models/cultural_item.dart';
+import '../models/rating_item.dart';
 import '../models/route_model.dart';
 import '../services/cultural_items_service.dart';
+import '../services/social_service.dart';
 
-class RouteDetailScreen extends StatelessWidget {
+class RouteDetailScreen extends StatefulWidget {
   final RouteModel route;
   static final _culturalItemsService = CulturalItemsService();
 
   const RouteDetailScreen({super.key, required this.route});
 
   @override
+  State<RouteDetailScreen> createState() => _RouteDetailScreenState();
+}
+
+class _RouteDetailScreenState extends State<RouteDetailScreen> {
+  final _socialService = SocialService();
+  final _commentCtrl = TextEditingController();
+
+  int _likesCount = 0;
+  bool _liked = false;
+  bool _likeLoading = false;
+  int _score = 5;
+  bool _ratingLoading = false;
+  Future<List<RatingItem>>? _ratingsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSocial();
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSocial() async {
+    try {
+      final likes = await _socialService.getLikesCount(widget.route.routeId);
+      bool liked = false;
+      try {
+        liked = await _socialService.getLikeStatus(widget.route.routeId);
+      } catch (_) {
+        liked = false;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _likesCount = likes;
+        _liked = liked;
+        _ratingsFuture = _socialService.getRatings(widget.route.routeId);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _ratingsFuture = _socialService.getRatings(widget.route.routeId);
+      });
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    if (_likeLoading) return;
+    setState(() => _likeLoading = true);
+    try {
+      final wasLiked = _liked;
+      final newLiked = wasLiked
+          ? await _socialService.unlikeRoute(widget.route.routeId)
+          : await _socialService.likeRoute(widget.route.routeId);
+      final likes = await _socialService.getLikesCount(widget.route.routeId);
+
+      if (!mounted) return;
+      setState(() {
+        _liked = newLiked;
+        _likesCount = likes;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _likeLoading = false);
+    }
+  }
+
+  Future<void> _submitRating() async {
+    if (_ratingLoading) return;
+    setState(() => _ratingLoading = true);
+    try {
+      await _socialService.rateRoute(
+        routeId: widget.route.routeId,
+        score: _score,
+        comment: _commentCtrl.text.trim(),
+      );
+
+      if (!mounted) return;
+      _commentCtrl.clear();
+      setState(() {
+        _ratingsFuture = _socialService.getRatings(widget.route.routeId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Comentari enviat')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _ratingLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final route = widget.route;
     return Scaffold(
       appBar: AppBar(
         title: Text(route.name),
@@ -52,6 +159,37 @@ class RouteDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       _DifficultyBadge(difficulty: route.difficulty),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _likeLoading ? null : _toggleLike,
+                        icon: Icon(
+                          _liked ? Icons.favorite : Icons.favorite_border,
+                          color: Colors.white,
+                        ),
+                        label: Text(
+                          '$_likesCount',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _liked ? Colors.pink : Colors.grey[700],
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _liked ? 'T\'agrada aquesta ruta' : 'M\'agrada',
+                        style: const TextStyle(fontSize: 16, color: Colors.black87),
+                      ),
                     ],
                   ),
                 ),
@@ -260,6 +398,133 @@ class RouteDetailScreen extends StatelessWidget {
                   ),
                 ),
 
+                const SizedBox(height: 18),
+
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.white, Colors.green[50]!],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionTitle(title: 'Comentaris'),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                const Text('Puntuació:', style: TextStyle(fontSize: 16)),
+                                const SizedBox(width: 8),
+                                DropdownButton<int>(
+                                  value: _score,
+                                  items: [1, 2, 3, 4, 5]
+                                      .map((v) => DropdownMenuItem(
+                                            value: v,
+                                            child: Text('$v'),
+                                          ))
+                                      .toList(),
+                                  onChanged: _ratingLoading
+                                      ? null
+                                      : (v) => setState(() => _score = v ?? 5),
+                                ),
+                                const Spacer(),
+                                ElevatedButton(
+                                  onPressed: _ratingLoading ? null : _submitRating,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green[700],
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  child: const Text('Enviar'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _commentCtrl,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                hintText: 'Escriu un comentari sobre la ruta...'
+                                    ,
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            FutureBuilder<List<RatingItem>>(
+                              future: _ratingsFuture,
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState != ConnectionState.done) {
+                                  return const LinearProgressIndicator();
+                                }
+                                if (snapshot.hasError) {
+                                  return const Text('Error carregant comentaris');
+                                }
+                                final ratings = snapshot.data ?? [];
+                                if (ratings.isEmpty) {
+                                  return const Text('Encara no hi ha comentaris.');
+                                }
+
+                                return Column(
+                                  children: ratings.map((r) {
+                                    return Container(
+                                      width: double.infinity,
+                                      margin: const EdgeInsets.symmetric(vertical: 6),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.green[100]!),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Usuari #${r.userId} · ${r.score}/5',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            r.comment.isEmpty ? '—' : r.comment,
+                                            style: const TextStyle(fontSize: 15, color: Colors.black87),
+                                          ),
+                                          if (r.createdAt != null) ...[
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              _formatDate(r.createdAt!),
+                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                            ),
+                                          ]
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 24),
 
                 // Botón futuro: ver mapa / ver GPX / POIs
@@ -349,10 +614,10 @@ class RouteDetailScreen extends StatelessWidget {
   }
 
   Future<List<CulturalItem>> _loadCulturalItemsWithRecompute(int routeId) async {
-    var items = await _culturalItemsService.getByRoute(routeId);
+    var items = await RouteDetailScreen._culturalItemsService.getByRoute(routeId);
     if (items.isEmpty) {
-      await _culturalItemsService.recomputeForRoute(routeId: routeId, radiusM: 5000);
-      items = await _culturalItemsService.getByRoute(routeId);
+      await RouteDetailScreen._culturalItemsService.recomputeForRoute(routeId: routeId, radiusM: 5000);
+      items = await RouteDetailScreen._culturalItemsService.getByRoute(routeId);
     }
     return items;
   }
