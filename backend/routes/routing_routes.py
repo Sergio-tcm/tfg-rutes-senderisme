@@ -1,23 +1,9 @@
 import requests
 from flask import Blueprint, jsonify, request
-from utils.geo import haversine_m
 
 routing_bp = Blueprint("routing", __name__, url_prefix="/routing")
 
 OSRM_BASE_URL = "https://router.project-osrm.org"  # público, sin API key
-
-def _straight_line_response(start_lat, start_lon, end_lat, end_lon):
-    distance_m = haversine_m(start_lat, start_lon, end_lat, end_lon)
-    distance_km = distance_m / 1000.0
-    duration_min = int(round((distance_km / 4.5) * 60))  # 4.5 km/h
-    polyline = [[float(start_lat), float(start_lon)], [float(end_lat), float(end_lon)]]
-    return {
-        "distance_km": round(distance_km, 2),
-        "duration_min": duration_min,
-        "polyline": polyline,
-        "steps": ["Camí"],
-        "fallback": True,
-    }
 
 @routing_bp.get("/walking")
 def walking_route():
@@ -57,6 +43,7 @@ def walking_route():
             "overview": "full",
             "geometries": "geojson",
             "steps": "true",
+            "continue_straight": "true",
         }
 
         r = requests.get(url_foot, params=params, timeout=12)
@@ -66,18 +53,11 @@ def walking_route():
         data = r.json()
 
         if data.get("code") != "Ok" or not data.get("routes"):
-            fallback = _straight_line_response(start_lat, start_lon, end_lat, end_lon)
-            return jsonify(fallback), 200
+            return jsonify({"error": "No s'ha pogut calcular la ruta"}), 502
 
         route = data["routes"][0]
         distance_m = float(route.get("distance", 0.0))
         duration_s = float(route.get("duration", 0.0))
-
-        # Fallback if OSRM makes a very large detour
-        straight_m = haversine_m(start_lat, start_lon, end_lat, end_lon)
-        if straight_m > 0 and distance_m > (straight_m * 1.8):
-            fallback = _straight_line_response(start_lat, start_lon, end_lat, end_lon)
-            return jsonify(fallback), 200
 
         # GeoJSON coordinates: [[lon,lat], [lon,lat], ...]
         coords_geo = route["geometry"]["coordinates"]
