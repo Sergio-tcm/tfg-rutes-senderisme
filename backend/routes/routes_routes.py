@@ -127,7 +127,7 @@ def create_route():
     conn = get_connection()
     cur = conn.cursor()
 
-        cur.execute("""
+    cur.execute("""
                 INSERT INTO routes (
                     name, description, distance_km, difficulty, elevation_gain,
                     location, estimated_time, creator_id,
@@ -141,7 +141,7 @@ def create_route():
                     cultural_summary, has_historical_value, has_archaeology,
                     has_architecture, has_natural_interest, created_at
         """, (
-        name, description, distance_km, difficulty, elevation_gain,
+                name, description, distance_km, difficulty, elevation_gain,
         location, estimated_time, user_id,
         cultural_summary, has_historical_value, has_archaeology,
         has_architecture, has_natural_interest
@@ -446,11 +446,9 @@ def routes_for_cultural_item(item_id: int):
                     r.elevation_gain, r.location, r.estimated_time, r.creator_id,
                     r.cultural_summary, r.has_historical_value, r.has_archaeology,
                     r.has_architecture, r.has_natural_interest, r.created_at,
-                    rci.distance_m,
-                    u.name as creator_name
+                    rci.distance_m
                 FROM route_cultural_items rci
                 JOIN routes r ON r.route_id = rci.route_id
-                LEFT JOIN users u ON u.user_id = r.creator_id
                 WHERE rci.item_id = %s
                     AND rci.distance_m <= %s
         ORDER BY rci.distance_m ASC NULLS LAST, r.created_at DESC
@@ -491,7 +489,6 @@ def routes_for_cultural_item(item_id: int):
             "has_natural_interest": bool(r[13]),
             "created_at": r[14].isoformat() if r[14] else None,
             "distance_m": float(r[15]) if r[15] is not None else None,
-            "creator_name": r[16],
         })
 
     return jsonify(routes), 200
