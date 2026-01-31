@@ -14,6 +14,7 @@ from routes.routing_routes import routing_bp
 
 from routes.route_cultural_routes import route_cultural_bp
 from routes.user_preferences_routes import user_preferences_bp
+from routes.social_routes import social_bp
 
 
 load_dotenv()
@@ -39,6 +40,7 @@ app.register_blueprint(cultural_bp)
 app.register_blueprint(routing_bp)
 app.register_blueprint(route_cultural_bp)
 app.register_blueprint(user_preferences_bp)
+app.register_blueprint(social_bp)
 
 
 if __name__ == "__main__":
