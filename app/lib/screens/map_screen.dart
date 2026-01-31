@@ -410,6 +410,19 @@ class _MapScreenState extends State<MapScreen> {
     return '${clean.substring(0, max)}…';
   }
 
+  String _normalizeStepName(String raw) {
+    final clean = raw.trim().replaceAll(RegExp(r'[\(\)]'), '');
+    if (clean.isEmpty) return clean;
+
+    final lower = clean.toLowerCase();
+    const map = {
+      'camino': 'Camí',
+      'camí': 'Camí',
+    };
+
+    return map[lower] ?? clean;
+  }
+
   UserPreferencesModel _prefsFromApi(Map<String, dynamic> data) {
     if (data.isEmpty) {
       return const UserPreferencesModel(
@@ -674,9 +687,13 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _walkingTrack = pts;
         _walkingDistanceKm = result.distanceKm;
-        _walkingDurationMin = result.durationMin;
+        _walkingDurationMin = ((result.distanceKm / 4.5) * 60).round();
         _currentDestination = item;
-        _walkingSteps = result.steps.where((s) => s.toLowerCase() != 'altres').toList();
+        _walkingSteps = result.steps
+            .where((s) => s.toLowerCase() != 'altres')
+            .map(_normalizeStepName)
+            .where((s) => s.isNotEmpty)
+            .toList();
       });
 
       // Opcional: encuadrar la ruta en pantalla
@@ -733,7 +750,11 @@ class _MapScreenState extends State<MapScreen> {
         _walkingTrack = walkingPts;
         _walkingDistanceKm = totalDistanceKm;
         _walkingDurationMin = totalDurationMin;
-        _walkingSteps = walking.steps.where((s) => s.toLowerCase() != 'altres').toList();
+        _walkingSteps = walking.steps
+            .where((s) => s.toLowerCase() != 'altres')
+            .map(_normalizeStepName)
+            .where((s) => s.isNotEmpty)
+            .toList();
         _currentDestination = null;
       });
 
