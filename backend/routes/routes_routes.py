@@ -45,17 +45,17 @@ def get_routes():
     conn = get_connection()
     cur = conn.cursor()
 
-        cur.execute("""
-                SELECT
-                    r.route_id, r.name, r.description, r.distance_km, r.difficulty,
-                    r.elevation_gain, r.location, r.estimated_time, r.creator_id,
-                    r.cultural_summary, r.has_historical_value, r.has_archaeology,
-                    r.has_architecture, r.has_natural_interest, r.created_at,
-                    u.name as creator_name
-                FROM routes r
-                LEFT JOIN users u ON u.user_id = r.creator_id
-                ORDER BY r.created_at DESC
-        """)
+    cur.execute("""
+        SELECT
+          r.route_id, r.name, r.description, r.distance_km, r.difficulty,
+          r.elevation_gain, r.location, r.estimated_time, r.creator_id,
+          r.cultural_summary, r.has_historical_value, r.has_archaeology,
+          r.has_architecture, r.has_natural_interest, r.created_at,
+          u.name as creator_name
+        FROM routes r
+        LEFT JOIN users u ON u.user_id = r.creator_id
+        ORDER BY r.created_at DESC
+    """)
     rows = cur.fetchall()
 
     cur.close()
