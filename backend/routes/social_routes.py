@@ -112,10 +112,12 @@ def list_ratings(route_id: int):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT rating_id, user_id, route_id, score, comment, created_at
-                FROM ratings
-                WHERE route_id = %s
-                ORDER BY created_at DESC
+                SELECT r.rating_id, r.user_id, r.route_id, r.score, r.comment, r.created_at,
+                       u.name as user_name
+                FROM ratings r
+                LEFT JOIN users u ON u.user_id = r.user_id
+                WHERE r.route_id = %s
+                ORDER BY r.created_at DESC
                 """,
                 (route_id,),
             )
@@ -130,6 +132,7 @@ def list_ratings(route_id: int):
                 "score": int(r[3]),
                 "comment": r[4] or "",
                 "created_at": r[5].isoformat() if r[5] else None,
+                "user_name": r[6],
             })
 
         return jsonify(out), 200

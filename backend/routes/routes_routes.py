@@ -45,15 +45,17 @@ def get_routes():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT
-          route_id, name, description, distance_km, difficulty,
-          elevation_gain, location, estimated_time, creator_id,
-          cultural_summary, has_historical_value, has_archaeology,
-          has_architecture, has_natural_interest, created_at
-        FROM routes
-        ORDER BY created_at DESC
-    """)
+        cur.execute("""
+                SELECT
+                    r.route_id, r.name, r.description, r.distance_km, r.difficulty,
+                    r.elevation_gain, r.location, r.estimated_time, r.creator_id,
+                    r.cultural_summary, r.has_historical_value, r.has_archaeology,
+                    r.has_architecture, r.has_natural_interest, r.created_at,
+                    u.name as creator_name
+                FROM routes r
+                LEFT JOIN users u ON u.user_id = r.creator_id
+                ORDER BY r.created_at DESC
+        """)
     rows = cur.fetchall()
 
     cur.close()
@@ -89,6 +91,7 @@ def get_routes():
             "has_architecture": bool(r[12]),
             "has_natural_interest": bool(r[13]),
             "created_at": r[14].isoformat() if r[14] else None,
+            "creator_name": r[15],
         })
 
     return jsonify(routes), 200
@@ -124,20 +127,20 @@ def create_route():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
-        INSERT INTO routes (
-          name, description, distance_km, difficulty, elevation_gain,
-          location, estimated_time, creator_id,
-          cultural_summary, has_historical_value, has_archaeology,
-          has_architecture, has_natural_interest
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING
-          route_id, name, description, distance_km, difficulty,
-          elevation_gain, location, estimated_time, creator_id,
-          cultural_summary, has_historical_value, has_archaeology,
-          has_architecture, has_natural_interest, created_at
-    """, (
+        cur.execute("""
+                INSERT INTO routes (
+                    name, description, distance_km, difficulty, elevation_gain,
+                    location, estimated_time, creator_id,
+                    cultural_summary, has_historical_value, has_archaeology,
+                    has_architecture, has_natural_interest
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING
+                    route_id, name, description, distance_km, difficulty,
+                    elevation_gain, location, estimated_time, creator_id,
+                    cultural_summary, has_historical_value, has_archaeology,
+                    has_architecture, has_natural_interest, created_at
+        """, (
         name, description, distance_km, difficulty, elevation_gain,
         location, estimated_time, user_id,
         cultural_summary, has_historical_value, has_archaeology,
@@ -158,6 +161,17 @@ def create_route():
     # Always return the fresh computed difficulty to ensure consistency for new routes
     response_difficulty = calculate_difficulty(response_distance, response_elevation, response_time, lang='ca')
 
+    creator_name = None
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT name FROM users WHERE user_id=%s", (user_id,))
+        row_name = cur.fetchone()
+        creator_name = row_name[0] if row_name else None
+    finally:
+        cur.close()
+        conn.close()
+
     return jsonify({
         "route_id": r[0],
         "name": r[1],
@@ -168,6 +182,7 @@ def create_route():
         "location": r[6] or "",
         "estimated_time": response_time,
         "creator_id": int(r[8]),
+        "creator_name": creator_name,
         "cultural_summary": r[9] or "",
         "has_historical_value": bool(r[10]),
         "has_archaeology": bool(r[11]),
@@ -426,14 +441,16 @@ def routes_for_cultural_item(item_id: int):
 
     cur.execute(
         """
-        SELECT
-          r.route_id, r.name, r.description, r.distance_km, r.difficulty,
-          r.elevation_gain, r.location, r.estimated_time, r.creator_id,
-          r.cultural_summary, r.has_historical_value, r.has_archaeology,
-          r.has_architecture, r.has_natural_interest, r.created_at,
-          rci.distance_m
+                SELECT
+                    r.route_id, r.name, r.description, r.distance_km, r.difficulty,
+                    r.elevation_gain, r.location, r.estimated_time, r.creator_id,
+                    r.cultural_summary, r.has_historical_value, r.has_archaeology,
+                    r.has_architecture, r.has_natural_interest, r.created_at,
+                    rci.distance_m,
+                    u.name as creator_name
                 FROM route_cultural_items rci
-        JOIN routes r ON r.route_id = rci.route_id
+                JOIN routes r ON r.route_id = rci.route_id
+                LEFT JOIN users u ON u.user_id = r.creator_id
                 WHERE rci.item_id = %s
                     AND rci.distance_m <= %s
         ORDER BY rci.distance_m ASC NULLS LAST, r.created_at DESC
@@ -474,6 +491,7 @@ def routes_for_cultural_item(item_id: int):
             "has_natural_interest": bool(r[13]),
             "created_at": r[14].isoformat() if r[14] else None,
             "distance_m": float(r[15]) if r[15] is not None else None,
+            "creator_name": r[16],
         })
 
     return jsonify(routes), 200
