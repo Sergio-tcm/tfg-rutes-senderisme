@@ -251,10 +251,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                             ),
                             _InfoRow(label: 'Temps estimat', value: route.estimatedTime),
                             _InfoRow(label: 'Dificultat', value: route.difficulty),
-                            _InfoRow(label: 'ID ruta', value: route.routeId.toString()),
                             _InfoRow(
-                              label: 'Creat per (ID)',
-                              value: route.creatorId.toString(),
+                              label: 'Creat per',
+                              value: (route.creatorName != null && route.creatorName!.isNotEmpty)
+                                  ? route.creatorName!
+                                  : 'Usuari #${route.creatorId}',
                             ),
                             _InfoRow(label: 'Creada el', value: _formatDate(route.createdAt)),
                           ],
@@ -493,7 +494,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Usuari #${r.userId} · ${r.score}/5',
+                                            '${(r.userName != null && r.userName!.isNotEmpty) ? r.userName! : 'Usuari #${r.userId}'} · ${r.score}/5',
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w600,
                                               fontSize: 15,

@@ -8,6 +8,7 @@ class RouteModel {
   final String location;
   final String estimatedTime; // estimated_time
   final int creatorId; // creator_id
+  final String? creatorName; // creator_name
 
   final String culturalSummary; // cultural_summary
   final bool hasHistoricalValue; // has_historical_value
@@ -27,6 +28,7 @@ class RouteModel {
     required this.location,
     required this.estimatedTime,
     required this.creatorId,
+    this.creatorName,
     required this.culturalSummary,
     required this.hasHistoricalValue,
     required this.hasArchaeology,
@@ -96,6 +98,7 @@ class RouteModel {
       location: (json['location'] ?? '').toString(),
       estimatedTime: (json['estimated_time'] ?? '').toString(),
       creatorId: _toInt(json['creator_id']),
+      creatorName: json['creator_name']?.toString(),
       culturalSummary: (json['cultural_summary'] ?? '').toString(),
       hasHistoricalValue: _toBool(json['has_historical_value']),
       hasArchaeology: _toBool(json['has_archaeology']),
@@ -116,6 +119,7 @@ class RouteModel {
       'location': location,
       'estimated_time': estimatedTime,
       'creator_id': creatorId,
+      'creator_name': creatorName,
       'cultural_summary': culturalSummary,
       'has_historical_value': hasHistoricalValue,
       'has_archaeology': hasArchaeology,
@@ -136,6 +140,7 @@ class RouteModel {
     String? location,
     String? estimatedTime,
     int? creatorId,
+    String? creatorName,
     String? culturalSummary,
     bool? hasHistoricalValue,
     bool? hasArchaeology,
@@ -153,6 +158,7 @@ class RouteModel {
       location: location ?? this.location,
       estimatedTime: estimatedTime ?? this.estimatedTime,
       creatorId: creatorId ?? this.creatorId,
+      creatorName: creatorName ?? this.creatorName,
       culturalSummary: culturalSummary ?? this.culturalSummary,
       hasHistoricalValue: hasHistoricalValue ?? this.hasHistoricalValue,
       hasArchaeology: hasArchaeology ?? this.hasArchaeology,

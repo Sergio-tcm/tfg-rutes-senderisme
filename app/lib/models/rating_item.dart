@@ -5,6 +5,7 @@ class RatingItem {
   final int score;
   final String comment;
   final DateTime? createdAt;
+  final String? userName;
 
   const RatingItem({
     required this.ratingId,
@@ -13,6 +14,7 @@ class RatingItem {
     required this.score,
     required this.comment,
     required this.createdAt,
+    this.userName,
   });
 
   factory RatingItem.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,7 @@ class RatingItem {
       createdAt: json['created_at'] == null
           ? null
           : DateTime.parse(json['created_at'].toString()),
+      userName: json['user_name']?.toString(),
     );
   }
 }
