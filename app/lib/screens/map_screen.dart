@@ -84,6 +84,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _routeStartReachedNotified = false;
   bool _navActionsExpanded = false;
   int? _activeNavigationRouteId;
+  bool _autoFinishingRoute = false;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -135,6 +136,7 @@ class _MapScreenState extends State<MapScreen> {
       _lastOffRouteAlert = null;
       _lastAutoRecalcAt = null;
       _autoRecalculatingRoute = false;
+      _autoFinishingRoute = false;
     });
 
     if (_currentPosition != null) {
@@ -191,6 +193,7 @@ class _MapScreenState extends State<MapScreen> {
       _lastAutoRecalcAt = null;
       _autoRecalculatingRoute = false;
       _routeStartReachedNotified = false;
+      _autoFinishingRoute = false;
       _navigationCompletedPath = const [];
       _currentRouteStartDestination = null;
       _activeNavigationRouteId = null;
@@ -517,6 +520,29 @@ class _MapScreenState extends State<MapScreen> {
     _clearNavigationVisualState();
   }
 
+  Future<void> _finishNavigationFlowAutomatically() async {
+    if (!mounted || _autoFinishingRoute || !_navigationMode) return;
+
+    setState(() {
+      _autoFinishingRoute = true;
+      _navActionsExpanded = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Has arribat al final de la ruta')),
+    );
+
+    try {
+      await _finishNavigationFlow();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _autoFinishingRoute = false;
+        });
+      }
+    }
+  }
+
   Future<void> _autoRecalculateToCurrentDestination(LatLng currentPos) async {
     final destination = _currentDestination;
     if (!mounted || destination == null || !_navigationMode || _autoRecalculatingRoute) {
@@ -675,6 +701,26 @@ class _MapScreenState extends State<MapScreen> {
             content: Text('Has arribat a l\'inici. Comença la ruta guiada!'),
           ),
         );
+      }
+    }
+
+    if (_navigationMode &&
+        !_autoFinishingRoute &&
+        _activeNavigationRouteId != null &&
+        _currentRouteStartDestination == null &&
+        _track.isNotEmpty &&
+        path.isNotEmpty &&
+        nearestIndex >= 0) {
+      final tailStartIndex = max(0, path.length - 3);
+      final isNearTail = nearestIndex >= tailStartIndex;
+      final distanceToEndM = _haversineKm(point, _track.last) * 1000;
+      final remainingDistanceM = (_remainingDistanceKm ?? double.infinity) * 1000;
+      final reachedEnd = (distanceToEndM.isFinite && distanceToEndM <= 25) ||
+          (remainingDistanceM.isFinite && remainingDistanceM <= 30);
+
+      if (isNearTail && reachedEnd) {
+        unawaited(_finishNavigationFlowAutomatically());
+        return;
       }
     }
 
@@ -2350,7 +2396,7 @@ class _MapScreenState extends State<MapScreen> {
                                 _navMenuItem(
                                   icon: Icons.cleaning_services,
                                   label: 'Finalitzar ruta',
-                                  onTap: _finishNavigationFlow,
+                                  onTap: _autoFinishingRoute ? null : _finishNavigationFlow,
                                 ),
                               ],
                             ),
