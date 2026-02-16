@@ -77,52 +77,62 @@ def _compute_adaptive_signals(base_fitness: str, base_distance: float, learning:
 
 
 def _load_adaptive_snapshot(conn, user_id: int):
+    base_fitness = "mitjana"
+    base_distance = 10.0
+
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT fitness_level, preferred_distance
-            FROM user_preferences
-            WHERE user_id = %s
-            """,
-            (user_id,),
-        )
-        pref = cur.fetchone()
+        try:
+            cur.execute(
+                """
+                SELECT fitness_level, preferred_distance
+                FROM user_preferences
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            pref = cur.fetchone()
+            if pref is not None:
+                base_fitness = pref[0] or "mitjana"
+                if pref[1] is not None:
+                    base_distance = float(pref[1])
+        except Exception:
+            pass
 
-        if pref is None:
-            return None
-
-        base_fitness = pref[0] or "baixa"
-        base_distance = float(pref[1]) if pref[1] is not None else 10.0
-
-        cur.execute(
-            """
-            SELECT
-                COALESCE(SUM(urc.completion_count), 0) AS total_completions,
-                COALESCE(
-                    SUM(urc.completion_count * COALESCE(r.distance_km, 0))
-                    / NULLIF(SUM(urc.completion_count), 0),
-                    0
-                ) AS avg_distance_km,
-                COALESCE(
-                    SUM(
-                        urc.completion_count *
-                        CASE
-                            WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN 3
-                            WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' THEN 2
-                            WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN 1
-                            ELSE 0
-                        END
-                    )
-                    / NULLIF(SUM(urc.completion_count), 0),
-                    0
-                ) AS avg_difficulty_rank
-            FROM user_route_completions urc
-            JOIN routes r ON r.route_id = urc.route_id
-            WHERE urc.user_id = %s
-            """,
-            (user_id,),
-        )
-        learning_row = cur.fetchone()
+        learning_row = (0, 0, 0)
+        try:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(SUM(urc.completion_count), 0) AS total_completions,
+                    COALESCE(
+                        SUM(urc.completion_count * COALESCE(r.distance_km, 0))
+                        / NULLIF(SUM(urc.completion_count), 0),
+                        0
+                    ) AS avg_distance_km,
+                    COALESCE(
+                        SUM(
+                            urc.completion_count *
+                            CASE
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN 3
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' THEN 2
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN 1
+                                ELSE 0
+                            END
+                        )
+                        / NULLIF(SUM(urc.completion_count), 0),
+                        0
+                    ) AS avg_difficulty_rank
+                FROM user_route_completions urc
+                JOIN routes r ON r.route_id = urc.route_id
+                WHERE urc.user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                learning_row = row
+        except Exception:
+            pass
 
     learning = {
         "total_completions": int(learning_row[0] or 0),
@@ -339,17 +349,12 @@ def complete_route(route_id: int):
     conn = get_connection()
     try:
         _ensure_user_route_completions_table(conn)
-        before_snapshot = None
+        before_snapshot = _load_adaptive_snapshot(conn, user_id)
         after_snapshot = None
         update_payload = {
             "preferences_updated": False,
             "preference_update_message": "Ruta completada. Preferències iguals de moment.",
         }
-
-        try:
-            before_snapshot = _load_adaptive_snapshot(conn, user_id)
-        except Exception:
-            before_snapshot = None
 
         with conn.cursor() as cur:
             cur.execute(
@@ -380,14 +385,8 @@ def complete_route(route_id: int):
             )
             row = cur.fetchone()
 
-        try:
-            after_snapshot = _load_adaptive_snapshot(conn, user_id)
-            update_payload = _build_preferences_update_payload(before_snapshot, after_snapshot)
-        except Exception:
-            update_payload = {
-                "preferences_updated": False,
-                "preference_update_message": "Ruta completada. No s'han pogut recalcular preferències ara mateix.",
-            }
+        after_snapshot = _load_adaptive_snapshot(conn, user_id)
+        update_payload = _build_preferences_update_payload(before_snapshot, after_snapshot)
 
         conn.commit()
         return jsonify({
