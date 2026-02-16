@@ -72,7 +72,6 @@ class _MapScreenState extends State<MapScreen> {
   final Map<int, List<LatLng>> _routeTrackCache = {};
   final List<int> _routeTrackCacheOrder = [];
   bool _navigationMode = false;
-  bool _followUser = true;
   List<LatLng> _navigationPath = const [];
   List<LatLng> _navigationCompletedPath = const [];
   double? _distanceToPathM;
@@ -81,6 +80,7 @@ class _MapScreenState extends State<MapScreen> {
   DateTime? _lastAutoRecalcAt;
   bool _autoRecalculatingRoute = false;
   bool _routeStartReachedNotified = false;
+  bool _navActionsExpanded = false;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -124,7 +124,7 @@ class _MapScreenState extends State<MapScreen> {
 
     setState(() {
       _navigationMode = true;
-      _followUser = true;
+      _navActionsExpanded = false;
       _navigationPath = path;
       _navigationCompletedPath = const [];
       _distanceToPathM = null;
@@ -181,7 +181,7 @@ class _MapScreenState extends State<MapScreen> {
     if (!mounted) return;
     setState(() {
       _navigationMode = false;
-      _followUser = true;
+      _navActionsExpanded = false;
       _distanceToPathM = null;
       _remainingDistanceKm = null;
       _lastOffRouteAlert = null;
@@ -341,11 +341,6 @@ class _MapScreenState extends State<MapScreen> {
         _remainingDistanceKm = _trackDistanceKm(remaining);
       }
     });
-
-    if (_navigationMode && _followUser) {
-      final currentZoom = _mapController.camera.zoom;
-      _mapController.move(point, currentZoom < 15 ? 15 : currentZoom);
-    }
 
     if (_navigationMode && _currentRouteStartDestination != null && !_routeStartReachedNotified) {
       final distanceToStartM = _haversineKm(point, _currentRouteStartDestination!) * 1000;
@@ -1105,39 +1100,52 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _compactNavButton({
+  Widget _navMenuItem({
     required IconData icon,
-    required String tooltip,
-    required bool selected,
+    required String label,
     required VoidCallback? onTap,
+    bool selected = false,
   }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(13),
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: onTap == null
-                ? Colors.grey[200]
-                : (selected ? Colors.green[700] : Colors.white),
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(
-              color: onTap == null ? Colors.grey.shade300 : Colors.green.shade200,
-            ),
+    return SizedBox(
+      width: 170,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          elevation: 2,
+          backgroundColor: selected ? Colors.green[700] : Colors.white,
+          foregroundColor: selected ? Colors.white : Colors.green[800],
+          side: BorderSide(color: Colors.green.shade200),
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            icon,
-            size: 22,
-            color: onTap == null
-                ? Colors.grey[500]
-                : (selected ? Colors.white : Colors.green[800]),
-          ),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         ),
       ),
     );
+  }
+
+  Future<void> _centerCameraOnce() async {
+    LatLng? point = _currentPosition;
+    if (point == null) {
+      try {
+        final pos = await _locationService.getCurrentPosition();
+        point = LatLng(pos.latitude, pos.longitude);
+        if (!mounted) return;
+        setState(() {
+          _currentPosition = point;
+        });
+      } catch (_) {
+        return;
+      }
+    }
+
+    final zoom = _mapController.camera.zoom;
+    final targetZoom = zoom.isFinite ? max(zoom, 16.2).clamp(1.0, 18.0) : 16.2;
+    _mapController.move(point, targetZoom);
   }
 
   Future<void> _openUrl(String url) async {
@@ -1714,42 +1722,44 @@ class _MapScreenState extends State<MapScreen> {
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         elevation: 4,
-        actions: [
-          if (!isRouteMode)
-            PopupMenuButton<int>(
-              tooltip: 'Radi de cerca',
-              onSelected: (v) {
-                setState(() => _radiusM = v);
-                _adjustZoomForRadius();
-                _reloadNearItems();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 500, child: Text('500 m', style: TextStyle(fontSize: 16))),
-                PopupMenuItem(value: 1000, child: Text('1 km', style: TextStyle(fontSize: 16))),
-                PopupMenuItem(value: 2000, child: Text('2 km', style: TextStyle(fontSize: 16))),
-                PopupMenuItem(value: 3000, child: Text('3 km', style: TextStyle(fontSize: 16))),
-                PopupMenuItem(value: 5000, child: Text('5 km', style: TextStyle(fontSize: 16))),
-                PopupMenuItem(value: 10000, child: Text('10 km', style: TextStyle(fontSize: 16))),
+        actions: _navigationMode
+            ? const []
+            : [
+                if (!isRouteMode)
+                  PopupMenuButton<int>(
+                    tooltip: 'Radi de cerca',
+                    onSelected: (v) {
+                      setState(() => _radiusM = v);
+                      _adjustZoomForRadius();
+                      _reloadNearItems();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 500, child: Text('500 m', style: TextStyle(fontSize: 16))),
+                      PopupMenuItem(value: 1000, child: Text('1 km', style: TextStyle(fontSize: 16))),
+                      PopupMenuItem(value: 2000, child: Text('2 km', style: TextStyle(fontSize: 16))),
+                      PopupMenuItem(value: 3000, child: Text('3 km', style: TextStyle(fontSize: 16))),
+                      PopupMenuItem(value: 5000, child: Text('5 km', style: TextStyle(fontSize: 16))),
+                      PopupMenuItem(value: 10000, child: Text('10 km', style: TextStyle(fontSize: 16))),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.green[200]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _radiusM >= 1000 ? '${(_radiusM / 1000).toInt()} km' : '$_radiusM m',
+                        style: TextStyle(color: Colors.green[800], fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  tooltip: isRouteMode ? 'Recalcular punts' : 'Recarregar (prop)',
+                  icon: Icon(isRouteMode ? Icons.refresh : Icons.my_location, color: Colors.white),
+                  onPressed: isRouteMode ? _recomputeRouteCulturalItems : _loadNearMe,
+                ),
               ],
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.green[200]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _radiusM >= 1000 ? '${(_radiusM / 1000).toInt()} km' : '$_radiusM m',
-                  style: TextStyle(color: Colors.green[800], fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-          IconButton(
-            tooltip: isRouteMode ? 'Recalcular punts' : 'Recarregar (prop)',
-            icon: Icon(isRouteMode ? Icons.refresh : Icons.my_location, color: Colors.white),
-            onPressed: isRouteMode ? _recomputeRouteCulturalItems : _loadNearMe,
-          ),
-        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -1840,7 +1850,7 @@ class _MapScreenState extends State<MapScreen> {
                 ),
 
               // círculo de radio
-              if (_currentPosition != null)
+              if (_currentPosition != null && !_navigationMode)
                 CircleLayer(
                   circles: [
                     CircleMarker(
@@ -1977,57 +1987,75 @@ class _MapScreenState extends State<MapScreen> {
               right: 12,
               bottom: 88,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  _compactNavButton(
-                    icon: _navigationMode ? Icons.pause_circle : Icons.play_circle,
-                    tooltip: _navigationMode ? 'Atura navegació' : 'Inicia navegació',
-                    selected: _navigationMode,
-                    onTap: (_walkingTrack.length < 2)
-                        ? null
-                        : () async {
-                            if (_navigationMode) {
-                              await _stopNavigation();
-                            } else {
-                              final navPath = <LatLng>[];
-                              navPath.addAll(_walkingTrack);
-                              if (_track.isNotEmpty && _currentDestination == null) {
-                                navPath.addAll(_track);
-                              }
-                              await _startNavigation(navPath);
-                            }
-                          },
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: !_navActionsExpanded
+                        ? const SizedBox.shrink()
+                        : Container(
+                            key: const ValueKey('nav-menu-open'),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(238),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.green.shade100),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 8,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                _navMenuItem(
+                                  icon: Icons.center_focus_strong,
+                                  label: 'Centrar càmera',
+                                  selected: false,
+                                  onTap: () async {
+                                    setState(() => _navActionsExpanded = false);
+                                    await _centerCameraOnce();
+                                  },
+                                ),
+                                const SizedBox(height: 6),
+                                _navMenuItem(
+                                  icon: Icons.cleaning_services,
+                                  label: 'Finalitzar ruta',
+                                  onTap: () {
+                                    _stopNavigation(clearPath: true);
+                                    setState(() {
+                                      _navActionsExpanded = false;
+                                      if (widget.routeId == null) {
+                                        _track = const [];
+                                      }
+                                      _walkingTrack = const [];
+                                      _walkingDistanceKm = null;
+                                      _walkingDurationMin = null;
+                                      _routingError = null;
+                                      _currentDestination = null;
+                                      _currentRouteStartDestination = null;
+                                      _walkingSteps = const [];
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
                   ),
-                  const SizedBox(height: 6),
-                  _compactNavButton(
-                    icon: _followUser ? Icons.gps_fixed : Icons.gps_not_fixed,
-                    tooltip: _followUser ? 'Seguint posició' : 'Posició lliure',
-                    selected: _navigationMode && _followUser,
-                    onTap: !_navigationMode
-                        ? null
-                        : () {
-                            setState(() => _followUser = !_followUser);
-                          },
-                  ),
-                  const SizedBox(height: 6),
-                  _compactNavButton(
-                    icon: Icons.cleaning_services,
-                    tooltip: 'Netejar',
-                    selected: false,
-                    onTap: () {
-                      _stopNavigation(clearPath: true);
-                      setState(() {
-                        if (widget.routeId == null) {
-                          _track = const [];
-                        }
-                        _walkingTrack = const [];
-                        _walkingDistanceKm = null;
-                        _walkingDurationMin = null;
-                        _routingError = null;
-                        _currentDestination = null;
-                        _currentRouteStartDestination = null;
-                        _walkingSteps = const [];
-                      });
+                  FloatingActionButton.small(
+                    heroTag: 'nav_actions_fab',
+                    backgroundColor: Colors.green[700],
+                    foregroundColor: Colors.white,
+                    onPressed: () {
+                      setState(() => _navActionsExpanded = !_navActionsExpanded);
                     },
+                    child: Icon(_navActionsExpanded ? Icons.close : Icons.menu),
                   ),
                 ],
               ),
@@ -2053,7 +2081,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
 
           // contador simple
-          if (_nearItems.isNotEmpty)
+          if (_nearItems.isNotEmpty && !_navigationMode)
             Positioned(
               left: 12,
               bottom: 12,
