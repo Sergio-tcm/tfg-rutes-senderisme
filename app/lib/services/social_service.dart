@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/rating_item.dart';
+import '../models/route_model.dart';
 import 'token_storage.dart';
 
 class SocialService {
@@ -121,5 +122,28 @@ class SocialService {
 
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     return RatingItem.fromJson(data);
+  }
+
+  Future<List<RouteModel>> getLikedRoutes() async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('No hi ha sessió');
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/routes/liked');
+    final res = await http.get(url, headers: {
+      'Authorization': 'Bearer $token',
+    });
+
+    if (res.statusCode != 200) {
+      throw Exception('Error carregant rutes favorites');
+    }
+
+    final data = jsonDecode(res.body);
+    if (data is! List) {
+      throw Exception('Resposta inesperada');
+    }
+
+    return data.map<RouteModel>((e) => RouteModel.fromJson(e)).toList();
   }
 }

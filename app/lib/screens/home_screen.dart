@@ -10,6 +10,7 @@ import 'import_gpx_screen.dart';
 import 'map_screen.dart';
 import 'user_preferences_screen.dart';
 import 'user_routes_screen.dart';
+import 'favorite_routes_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -305,6 +306,19 @@ class HomeScreen extends StatelessWidget {
                         userName: name,
                       ),
                     ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              _profileActionButton(
+                label: 'Rutes favorites',
+                icon: Icons.favorite,
+                color: Colors.pink,
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FavoriteRoutesScreen()),
                   );
                 },
               ),

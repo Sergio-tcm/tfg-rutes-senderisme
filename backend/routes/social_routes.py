@@ -105,6 +105,57 @@ def like_status(route_id: int):
         conn.close()
 
 
+@social_bp.get("/liked")
+@jwt_required()
+def liked_routes():
+    user_id = int(get_jwt_identity())
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    r.route_id, r.name, r.description, r.distance_km, r.difficulty,
+                    r.elevation_gain, r.location, r.estimated_time, r.creator_id,
+                    r.cultural_summary, r.has_historical_value, r.has_archaeology,
+                    r.has_architecture, r.has_natural_interest, r.created_at,
+                    u.name AS creator_name
+                FROM likes l
+                JOIN routes r ON r.route_id = l.route_id
+                LEFT JOIN users u ON u.user_id = r.creator_id
+                WHERE l.user_id = %s
+                ORDER BY l.created_at DESC
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+        out = []
+        for r in rows:
+            out.append({
+                "route_id": int(r[0]),
+                "name": r[1] or "",
+                "description": r[2] or "",
+                "distance_km": float(r[3] or 0),
+                "difficulty": r[4] or "",
+                "elevation_gain": int(r[5] or 0),
+                "location": r[6] or "",
+                "estimated_time": r[7] or "",
+                "creator_id": int(r[8]),
+                "cultural_summary": r[9] or "",
+                "has_historical_value": bool(r[10]),
+                "has_archaeology": bool(r[11]),
+                "has_architecture": bool(r[12]),
+                "has_natural_interest": bool(r[13]),
+                "created_at": r[14].isoformat() if r[14] else None,
+                "creator_name": r[15],
+            })
+
+        return jsonify(out), 200
+    finally:
+        conn.close()
+
+
 @social_bp.get("/<int:route_id>/ratings")
 def list_ratings(route_id: int):
     conn = get_connection()
