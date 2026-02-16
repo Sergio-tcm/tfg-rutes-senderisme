@@ -19,6 +19,7 @@ import '../services/routing_service.dart';
 import '../services/routes_service.dart';
 import '../services/user_preferences_service.dart';
 import '../services/recommendation_service.dart';
+import '../services/social_service.dart';
 import '../models/route_near_item.dart';
 import '../models/user_preferences_model.dart';
 import 'route_detail_screen.dart';
@@ -50,6 +51,7 @@ class _MapScreenState extends State<MapScreen> {
   final _routesService = RoutesService();
   final _prefsService = UserPreferencesService();
   final _recoService = RecommendationService();
+  final _socialService = SocialService();
 
   bool _loading = false;
   String? _error;
@@ -81,6 +83,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _autoRecalculatingRoute = false;
   bool _routeStartReachedNotified = false;
   bool _navActionsExpanded = false;
+  int? _activeNavigationRouteId;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -190,10 +193,328 @@ class _MapScreenState extends State<MapScreen> {
       _routeStartReachedNotified = false;
       _navigationCompletedPath = const [];
       _currentRouteStartDestination = null;
+      _activeNavigationRouteId = null;
       if (clearPath) {
         _navigationPath = const [];
       }
     });
+  }
+
+  void _clearNavigationVisualState() {
+    setState(() {
+      if (widget.routeId == null) {
+        _track = const [];
+      }
+      _walkingTrack = const [];
+      _walkingDistanceKm = null;
+      _walkingDurationMin = null;
+      _routingError = null;
+      _currentDestination = null;
+      _currentRouteStartDestination = null;
+      _walkingSteps = const [];
+      _activeNavigationRouteId = null;
+    });
+  }
+
+  Future<bool> _showFinishDecisionSheet() async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Finalitzar ruta',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.green[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Has completat la ruta o la deixes per un altre moment?',
+                style: TextStyle(fontSize: 15, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.emoji_events),
+                  label: const Text('Sí, ruta completada'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  icon: const Icon(Icons.schedule),
+                  label: const Text('La deixo per un altre moment'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.green[800],
+                    side: BorderSide(color: Colors.green.shade200),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    return result == true;
+  }
+
+  Future<void> _showCompletionFeedbackSheet(int routeId) async {
+    int likesCount = 0;
+    bool liked = false;
+    try {
+      likesCount = await _socialService.getLikesCount(routeId);
+      liked = await _socialService.getLikeStatus(routeId);
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    int score = 5;
+    bool loadingLike = false;
+    bool loadingComment = false;
+    String? modalError;
+    String commentText = '';
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final maxHeight = MediaQuery.of(ctx).size.height * 0.82;
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  20 + MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ruta completada! 🎉',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.green[800],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: loadingLike
+                            ? null
+                            : () async {
+                                if (!ctx.mounted) return;
+                                setModalState(() => loadingLike = true);
+                                try {
+                                  liked = liked
+                                      ? await _socialService.unlikeRoute(routeId)
+                                      : await _socialService.likeRoute(routeId);
+                                  likesCount = await _socialService.getLikesCount(routeId);
+                                  if (!ctx.mounted) return;
+                                  setModalState(() {});
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setModalState(() => loadingLike = false);
+                                  }
+                                }
+                              },
+                        icon: Icon(liked ? Icons.favorite : Icons.favorite_border),
+                        label: Text('M\'agrada ($likesCount)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: liked ? Colors.pink : Colors.grey[200],
+                          foregroundColor: liked ? Colors.white : Colors.black87,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('Puntuació:', style: TextStyle(fontSize: 15)),
+                        const SizedBox(width: 8),
+                        DropdownButton<int>(
+                          value: score,
+                          items: [1, 2, 3, 4, 5]
+                              .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
+                              .toList(),
+                          onChanged: loadingComment
+                              ? null
+                              : (v) => setModalState(() => score = v ?? 5),
+                        ),
+                      ],
+                    ),
+                    TextField(
+                      onChanged: (value) {
+                        commentText = value;
+                      },
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        hintText: 'Vols deixar un comentari?',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              FocusScope.of(ctx).unfocus();
+                              await Future<void>.delayed(
+                                const Duration(milliseconds: 80),
+                              );
+                              if (ctx.mounted) {
+                                Navigator.pop(ctx);
+                              }
+                            },
+                            child: const Text(
+                              'Tornar al mapa',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: loadingComment
+                                ? null
+                                : () async {
+                                    final comment = commentText.trim();
+                                    if (comment.isEmpty) {
+                                      if (ctx.mounted) {
+                                        setModalState(
+                                          () => modalError =
+                                              'Escriu un comentari o prem "Tornar al mapa"',
+                                        );
+                                      }
+                                      return;
+                                    }
+
+                                    if (!ctx.mounted) return;
+                                    setModalState(() => modalError = null);
+                                    setModalState(() => loadingComment = true);
+                                    var closed = false;
+                                    try {
+                                      await _socialService.rateRoute(
+                                        routeId: routeId,
+                                        score: score,
+                                        comment: comment,
+                                      );
+                                      if (ctx.mounted) {
+                                        FocusScope.of(ctx).unfocus();
+                                        closed = true;
+                                        await Future<void>.delayed(
+                                          const Duration(milliseconds: 80),
+                                        );
+                                        if (ctx.mounted) {
+                                          Navigator.pop(ctx);
+                                        }
+                                      }
+                                    } catch (e) {
+                                      if (ctx.mounted) {
+                                        setModalState(
+                                          () => modalError =
+                                              e.toString().replaceFirst('Exception: ', ''),
+                                        );
+                                      }
+                                    } finally {
+                                      if (!closed && ctx.mounted) {
+                                        setModalState(() => loadingComment = false);
+                                      }
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[700],
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Desar comentari'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (modalError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        modalError!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+  }
+
+  Future<void> _finishNavigationFlow() async {
+    setState(() => _navActionsExpanded = false);
+
+    final completed = await _showFinishDecisionSheet();
+    if (!completed) {
+      await _stopNavigation(clearPath: true);
+      _clearNavigationVisualState();
+      return;
+    }
+
+    if (_activeNavigationRouteId != null) {
+      await _showCompletionFeedbackSheet(_activeNavigationRouteId!);
+      if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 180));
+    }
+
+    await _stopNavigation(clearPath: true);
+    _clearNavigationVisualState();
   }
 
   Future<void> _autoRecalculateToCurrentDestination(LatLng currentPos) async {
@@ -1285,6 +1606,7 @@ class _MapScreenState extends State<MapScreen> {
         _walkingDurationMin = ((result.distanceKm / 4.5) * 60).round();
         _currentDestination = item;
         _currentRouteStartDestination = null;
+        _activeNavigationRouteId = null;
         _routeStartReachedNotified = false;
         _walkingSteps = result.steps
             .where((s) => s.toLowerCase() != 'altres')
@@ -1356,6 +1678,7 @@ class _MapScreenState extends State<MapScreen> {
             .toList();
         _currentDestination = null;
         _currentRouteStartDestination = start;
+        _activeNavigationRouteId = item.route.routeId;
         _routeStartReachedNotified = false;
       });
 
@@ -2027,22 +2350,7 @@ class _MapScreenState extends State<MapScreen> {
                                 _navMenuItem(
                                   icon: Icons.cleaning_services,
                                   label: 'Finalitzar ruta',
-                                  onTap: () {
-                                    _stopNavigation(clearPath: true);
-                                    setState(() {
-                                      _navActionsExpanded = false;
-                                      if (widget.routeId == null) {
-                                        _track = const [];
-                                      }
-                                      _walkingTrack = const [];
-                                      _walkingDistanceKm = null;
-                                      _walkingDurationMin = null;
-                                      _routingError = null;
-                                      _currentDestination = null;
-                                      _currentRouteStartDestination = null;
-                                      _walkingSteps = const [];
-                                    });
-                                  },
+                                  onTap: _finishNavigationFlow,
                                 ),
                               ],
                             ),
