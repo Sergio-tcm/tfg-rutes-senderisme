@@ -57,6 +57,7 @@ class _MapScreenState extends State<MapScreen> {
   List<LatLng> _track = const [];
   List<CulturalItem> _nearItems = const [];
   LatLng? _currentPosition;
+  double _currentHeadingDeg = 0;
 
   // Walking route
   List<LatLng> _walkingTrack = const [];
@@ -79,6 +80,7 @@ class _MapScreenState extends State<MapScreen> {
   DateTime? _lastOffRouteAlert;
   DateTime? _lastAutoRecalcAt;
   bool _autoRecalculatingRoute = false;
+  bool _routeStartReachedNotified = false;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -130,8 +132,12 @@ class _MapScreenState extends State<MapScreen> {
       _lastOffRouteAlert = null;
       _lastAutoRecalcAt = null;
       _autoRecalculatingRoute = false;
-      _currentRouteStartDestination = null;
     });
+
+    if (_currentPosition != null) {
+      final targetZoom = max(_mapController.camera.zoom, 16.3).clamp(1.0, 18.0);
+      _mapController.move(_currentPosition!, targetZoom);
+    }
 
     try {
       final stream = await _locationService.getPositionStream(
@@ -148,7 +154,7 @@ class _MapScreenState extends State<MapScreen> {
             _distanceToPathM = null;
             _remainingDistanceKm = null;
             _autoRecalculatingRoute = false;
-            _currentRouteStartDestination = null;
+            _routeStartReachedNotified = false;
           });
         },
       );
@@ -159,7 +165,7 @@ class _MapScreenState extends State<MapScreen> {
         _distanceToPathM = null;
         _remainingDistanceKm = null;
         _autoRecalculatingRoute = false;
-        _currentRouteStartDestination = null;
+        _routeStartReachedNotified = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -181,6 +187,7 @@ class _MapScreenState extends State<MapScreen> {
       _lastOffRouteAlert = null;
       _lastAutoRecalcAt = null;
       _autoRecalculatingRoute = false;
+      _routeStartReachedNotified = false;
       _navigationCompletedPath = const [];
       _currentRouteStartDestination = null;
       if (clearPath) {
@@ -326,6 +333,7 @@ class _MapScreenState extends State<MapScreen> {
 
     setState(() {
       _currentPosition = point;
+      _currentHeadingDeg = (pos.heading.isFinite && pos.heading >= 0) ? pos.heading : _currentHeadingDeg;
       if (_navigationMode && path.isNotEmpty && nearestIndex >= 0) {
         _distanceToPathM = minDistanceM;
         _navigationCompletedPath = path.sublist(0, nearestIndex + 1);
@@ -337,6 +345,21 @@ class _MapScreenState extends State<MapScreen> {
     if (_navigationMode && _followUser) {
       final currentZoom = _mapController.camera.zoom;
       _mapController.move(point, currentZoom < 15 ? 15 : currentZoom);
+    }
+
+    if (_navigationMode && _currentRouteStartDestination != null && !_routeStartReachedNotified) {
+      final distanceToStartM = _haversineKm(point, _currentRouteStartDestination!) * 1000;
+      if (distanceToStartM.isFinite && distanceToStartM <= 25) {
+        setState(() {
+          _routeStartReachedNotified = true;
+          _currentRouteStartDestination = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Has arribat a l\'inici. Comença la ruta guiada!'),
+          ),
+        );
+      }
     }
 
     if (_navigationMode && minDistanceM.isFinite && minDistanceM > 50) {
@@ -1082,6 +1105,41 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _compactNavButton({
+    required IconData icon,
+    required String tooltip,
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(13),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: onTap == null
+                ? Colors.grey[200]
+                : (selected ? Colors.green[700] : Colors.white),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: onTap == null ? Colors.grey.shade300 : Colors.green.shade200,
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 22,
+            color: onTap == null
+                ? Colors.grey[500]
+                : (selected ? Colors.white : Colors.green[800]),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openUrl(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
@@ -1219,14 +1277,13 @@ class _MapScreenState extends State<MapScreen> {
         _walkingDurationMin = ((result.distanceKm / 4.5) * 60).round();
         _currentDestination = item;
         _currentRouteStartDestination = null;
+        _routeStartReachedNotified = false;
         _walkingSteps = result.steps
             .where((s) => s.toLowerCase() != 'altres')
             .map(_normalizeStepName)
             .where((s) => s.isNotEmpty)
             .toList();
       });
-
-          await _startNavigation(pts);
 
       // Opcional: encuadrar la ruta en pantalla
       if (pts.length >= 2) {
@@ -1235,6 +1292,8 @@ class _MapScreenState extends State<MapScreen> {
           CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
         );
       }
+
+      await _startNavigation(pts);
     } catch (e) {
       setState(() {
         _routingError = e.toString().replaceFirst('Exception: ', '');
@@ -1289,12 +1348,8 @@ class _MapScreenState extends State<MapScreen> {
             .toList();
         _currentDestination = null;
         _currentRouteStartDestination = start;
+        _routeStartReachedNotified = false;
       });
-
-          final navPath = <LatLng>[];
-          navPath.addAll(walkingPts);
-          navPath.addAll(track);
-          await _startNavigation(navPath);
 
       final allPoints = <LatLng>[];
       allPoints.addAll(walkingPts);
@@ -1305,6 +1360,11 @@ class _MapScreenState extends State<MapScreen> {
           CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
         );
       }
+
+      final navPath = <LatLng>[];
+      navPath.addAll(walkingPts);
+      navPath.addAll(track);
+      await _startNavigation(navPath);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1769,7 +1829,12 @@ class _MapScreenState extends State<MapScreen> {
                       point: _currentPosition!,
                       width: 40,
                       height: 40,
-                      child: const Icon(Icons.my_location, color: Colors.blue),
+                      child: _navigationMode
+                          ? Transform.rotate(
+                              angle: _currentHeadingDeg * pi / 180,
+                              child: const Icon(Icons.navigation, color: Colors.blue, size: 30),
+                            )
+                          : const Icon(Icons.my_location, color: Colors.blue),
                     ),
                   ],
                 ),
@@ -1820,124 +1885,151 @@ class _MapScreenState extends State<MapScreen> {
           if (_walkingDistanceKm != null && _walkingDurationMin != null)
             Positioned(
               left: 12,
-              right: 12,
+              right: 70,
               top: 12,
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.white,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.white.withAlpha(206), Colors.white.withAlpha(170)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white.withAlpha(165)),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Ruta: ${_walkingDistanceKm!.toStringAsFixed(2)} km · ${_walkingDurationMin!} min',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              _stopNavigation(clearPath: true);
-                              setState(() {
-                                if (widget.routeId == null) {
-                                  _track = const [];
-                                }
-                                _walkingTrack = const [];
-                                _walkingDistanceKm = null;
-                                _walkingDurationMin = null;
-                                _routingError = null;
-                                _currentDestination = null;
-                                _currentRouteStartDestination = null;
-                                _walkingSteps = const [];
-                              });
-                            },
-                            child: const Text('Netejar'),
-                          ),
-                        ],
+                      Text(
+                        _currentDestination != null
+                            ? 'Navegació fins al punt cultural'
+                            : (_currentRouteStartDestination != null
+                                ? 'Navegació fins a l\'inici de ruta'
+                                : 'Ruta en curs'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green[800],
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: (_walkingTrack.length < 2)
-                                ? null
-                                : () async {
-                                    if (_navigationMode) {
-                                      await _stopNavigation();
-                                    } else {
-                                      final navPath = <LatLng>[];
-                                      navPath.addAll(_walkingTrack);
-                                      if (_track.isNotEmpty && _currentDestination == null) {
-                                        navPath.addAll(_track);
-                                      }
-                                      await _startNavigation(navPath);
-                                    }
-                                  },
-                            icon: Icon(_navigationMode ? Icons.pause_circle : Icons.navigation),
-                            label: Text(_navigationMode ? 'Atura navegació' : 'Inicia navegació'),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton.icon(
-                            onPressed: !_navigationMode
-                                ? null
-                                : () {
-                                    setState(() => _followUser = !_followUser);
-                                  },
-                            icon: Icon(_followUser ? Icons.gps_fixed : Icons.gps_not_fixed),
-                            label: Text(_followUser ? 'Seguint posició' : 'Posició lliure'),
-                          ),
-                        ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_walkingDistanceKm!.toStringAsFixed(2)} km · ${_walkingDurationMin!} min',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                       ),
-                      if (_navigationMode && _distanceToPathM != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Desviació de la ruta: ${_distanceToPathM!.toStringAsFixed(0)} m',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: (_distanceToPathM ?? 0) > 50 ? Colors.red[700] : Colors.green[700],
-                              fontWeight: FontWeight.w600,
-                            ),
+                      if (_navigationMode && _remainingDistanceKm != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Restant: ${_remainingDistanceKm!.toStringAsFixed(2)} km',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      if (_navigationMode && _remainingDistanceKm != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            'Distància restant: ${_remainingDistanceKm!.toStringAsFixed(2)} km',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black87,
-                              fontWeight: FontWeight.w500,
-                            ),
+                      ],
+                      if (_navigationMode && _distanceToPathM != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Desviació: ${_distanceToPathM!.toStringAsFixed(0)} m',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: (_distanceToPathM ?? 0) > 50 ? Colors.red[700] : Colors.green[700],
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      if (_navigationMode && _autoRecalculatingRoute)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            'Recalculant ruta...',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.orange[800],
-                              fontWeight: FontWeight.w600,
-                            ),
+                      ],
+                      if (_navigationMode && _autoRecalculatingRoute) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Recalculant...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[800],
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      if (_walkingSteps.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Vies: ${_walkingSteps.join(", ")}',
-                            style: const TextStyle(fontSize: 14, color: Colors.black87),
+                      ],
+                      if (_walkingSteps.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Vies: ${_walkingSteps.join(", ")}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[700],
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                      ],
                     ],
                   ),
                 ),
+              ),
+            ),
+
+          if (_walkingDistanceKm != null && _walkingDurationMin != null)
+            Positioned(
+              right: 12,
+              bottom: 88,
+              child: Column(
+                children: [
+                  _compactNavButton(
+                    icon: _navigationMode ? Icons.pause_circle : Icons.play_circle,
+                    tooltip: _navigationMode ? 'Atura navegació' : 'Inicia navegació',
+                    selected: _navigationMode,
+                    onTap: (_walkingTrack.length < 2)
+                        ? null
+                        : () async {
+                            if (_navigationMode) {
+                              await _stopNavigation();
+                            } else {
+                              final navPath = <LatLng>[];
+                              navPath.addAll(_walkingTrack);
+                              if (_track.isNotEmpty && _currentDestination == null) {
+                                navPath.addAll(_track);
+                              }
+                              await _startNavigation(navPath);
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 6),
+                  _compactNavButton(
+                    icon: _followUser ? Icons.gps_fixed : Icons.gps_not_fixed,
+                    tooltip: _followUser ? 'Seguint posició' : 'Posició lliure',
+                    selected: _navigationMode && _followUser,
+                    onTap: !_navigationMode
+                        ? null
+                        : () {
+                            setState(() => _followUser = !_followUser);
+                          },
+                  ),
+                  const SizedBox(height: 6),
+                  _compactNavButton(
+                    icon: Icons.cleaning_services,
+                    tooltip: 'Netejar',
+                    selected: false,
+                    onTap: () {
+                      _stopNavigation(clearPath: true);
+                      setState(() {
+                        if (widget.routeId == null) {
+                          _track = const [];
+                        }
+                        _walkingTrack = const [];
+                        _walkingDistanceKm = null;
+                        _walkingDurationMin = null;
+                        _routingError = null;
+                        _currentDestination = null;
+                        _currentRouteStartDestination = null;
+                        _walkingSteps = const [];
+                      });
+                    },
+                  ),
+                ],
               ),
             ),
 
