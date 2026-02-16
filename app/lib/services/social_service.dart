@@ -7,6 +7,20 @@ import '../models/route_model.dart';
 import 'token_storage.dart';
 
 class SocialService {
+  dynamic _safeJsonDecode(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _bodySnippet(String body, {int max = 180}) {
+    final clean = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length <= max) return clean;
+    return '${clean.substring(0, max)}...';
+  }
+
   Future<int> getLikesCount(int routeId) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/routes/$routeId/likes/count');
     final res = await http.get(url);
@@ -158,12 +172,26 @@ class SocialService {
       'Authorization': 'Bearer $token',
     });
 
-    final data = jsonDecode(res.body);
+    final data = _safeJsonDecode(res.body);
     if (res.statusCode != 200) {
-      throw Exception(data['error'] ?? 'Error marcant ruta com completada');
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
+
+      final snippet = _bodySnippet(res.body);
+      throw Exception(
+        'Error marcant ruta com completada (HTTP ${res.statusCode}). Resposta: $snippet',
+      );
     }
 
-    return data as Map<String, dynamic>;
+    if (data is! Map<String, dynamic>) {
+      final snippet = _bodySnippet(res.body);
+      throw Exception(
+        'Resposta no JSON al completar ruta (HTTP ${res.statusCode}): $snippet',
+      );
+    }
+
+    return data;
   }
 
   Future<Set<int>> getCompletedRouteIds() async {

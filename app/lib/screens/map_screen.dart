@@ -511,11 +511,12 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
-    if (_activeNavigationRouteId != null) {
+    final routeIdToComplete = _activeNavigationRouteId ?? widget.routeId;
+    if (routeIdToComplete != null) {
       final canPersistCompletion = _routeStartReachedNotified || _allowPreStartCompletionForTesting;
       if (canPersistCompletion) {
         try {
-          final completionResult = await _socialService.completeRoute(_activeNavigationRouteId!);
+          final completionResult = await _socialService.completeRoute(routeIdToComplete);
           if (mounted) {
             final message = (completionResult['preference_update_message']?.toString().trim().isNotEmpty ?? false)
                 ? completionResult['preference_update_message'].toString()
@@ -524,10 +525,13 @@ class _MapScreenState extends State<MapScreen> {
               SnackBar(content: Text(message)),
             );
           }
-        } catch (_) {}
+        } catch (e, st) {
+          debugPrint('[ROUTE_COMPLETE_ERROR] route_id=$routeIdToComplete message=${e.toString().replaceFirst('Exception: ', '')}');
+          debugPrint('[ROUTE_COMPLETE_STACK] $st');
+        }
       }
 
-      await _showCompletionFeedbackSheet(_activeNavigationRouteId!);
+      await _showCompletionFeedbackSheet(routeIdToComplete);
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 180));
     }

@@ -339,7 +339,17 @@ def complete_route(route_id: int):
     conn = get_connection()
     try:
         _ensure_user_route_completions_table(conn)
-        before_snapshot = _load_adaptive_snapshot(conn, user_id)
+        before_snapshot = None
+        after_snapshot = None
+        update_payload = {
+            "preferences_updated": False,
+            "preference_update_message": "Ruta completada. Preferències iguals de moment.",
+        }
+
+        try:
+            before_snapshot = _load_adaptive_snapshot(conn, user_id)
+        except Exception:
+            before_snapshot = None
 
         with conn.cursor() as cur:
             cur.execute(
@@ -370,8 +380,14 @@ def complete_route(route_id: int):
             )
             row = cur.fetchone()
 
-        after_snapshot = _load_adaptive_snapshot(conn, user_id)
-        update_payload = _build_preferences_update_payload(before_snapshot, after_snapshot)
+        try:
+            after_snapshot = _load_adaptive_snapshot(conn, user_id)
+            update_payload = _build_preferences_update_payload(before_snapshot, after_snapshot)
+        except Exception:
+            update_payload = {
+                "preferences_updated": False,
+                "preference_update_message": "Ruta completada. No s'han pogut recalcular preferències ara mateix.",
+            }
 
         conn.commit()
         return jsonify({
@@ -385,6 +401,11 @@ def complete_route(route_id: int):
             "effective_max_difficulty": (after_snapshot or {}).get("effective_max_difficulty"),
             "effective_preferred_distance": (after_snapshot or {}).get("effective_preferred_distance"),
         }), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({
+            "error": f"Error intern completant ruta: {str(e)}",
+        }), 500
     finally:
         conn.close()
 
