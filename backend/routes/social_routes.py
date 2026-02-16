@@ -6,6 +6,23 @@ from db import get_connection
 social_bp = Blueprint("social", __name__, url_prefix="/routes")
 
 
+def _ensure_user_route_completions_table(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_route_completions (
+                completion_id SERIAL PRIMARY KEY,
+                user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                route_id INT NOT NULL REFERENCES routes(route_id) ON DELETE CASCADE,
+                completion_count INT NOT NULL DEFAULT 1,
+                first_completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (user_id, route_id)
+            )
+            """
+        )
+
+
 @social_bp.post("/<int:route_id>/like")
 @jwt_required()
 def like_route(route_id: int):
@@ -111,6 +128,7 @@ def liked_routes():
     user_id = int(get_jwt_identity())
     conn = get_connection()
     try:
+        _ensure_user_route_completions_table(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -119,14 +137,19 @@ def liked_routes():
                     r.elevation_gain, r.location, r.estimated_time, r.creator_id,
                     r.cultural_summary, r.has_historical_value, r.has_archaeology,
                     r.has_architecture, r.has_natural_interest, r.created_at,
-                    u.name AS creator_name
+                    u.name AS creator_name,
+                    EXISTS (
+                        SELECT 1
+                        FROM user_route_completions urc
+                        WHERE urc.user_id = %s AND urc.route_id = r.route_id
+                    ) AS completed_by_user
                 FROM likes l
                 JOIN routes r ON r.route_id = l.route_id
                 LEFT JOIN users u ON u.user_id = r.creator_id
                 WHERE l.user_id = %s
                 ORDER BY l.created_at DESC
                 """,
-                (user_id,),
+                (user_id, user_id),
             )
             rows = cur.fetchall()
 
@@ -149,9 +172,85 @@ def liked_routes():
                 "has_natural_interest": bool(r[13]),
                 "created_at": r[14].isoformat() if r[14] else None,
                 "creator_name": r[15],
+                "completed_by_user": bool(r[16]),
             })
 
         return jsonify(out), 200
+    finally:
+        conn.close()
+
+
+@social_bp.post("/<int:route_id>/complete")
+@jwt_required()
+def complete_route(route_id: int):
+    user_id = int(get_jwt_identity())
+
+    conn = get_connection()
+    try:
+        _ensure_user_route_completions_table(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM routes
+                WHERE route_id = %s
+                """,
+                (route_id,),
+            )
+            route_exists = cur.fetchone()
+            if not route_exists:
+                return jsonify({"error": "Ruta no trobada"}), 404
+
+            cur.execute(
+                """
+                INSERT INTO user_route_completions (
+                    user_id, route_id, completion_count, first_completed_at, last_completed_at
+                )
+                VALUES (%s, %s, 1, NOW(), NOW())
+                ON CONFLICT (user_id, route_id)
+                DO UPDATE SET
+                    completion_count = user_route_completions.completion_count + 1,
+                    last_completed_at = NOW()
+                RETURNING completion_count, last_completed_at
+                """,
+                (user_id, route_id),
+            )
+            row = cur.fetchone()
+
+        conn.commit()
+        return jsonify({
+            "route_id": route_id,
+            "user_id": user_id,
+            "completed": True,
+            "completion_count": int(row[0]),
+            "last_completed_at": row[1].isoformat() if row[1] else None,
+        }), 200
+    finally:
+        conn.close()
+
+
+@social_bp.get("/completed/ids")
+@jwt_required()
+def completed_route_ids():
+    user_id = int(get_jwt_identity())
+
+    conn = get_connection()
+    try:
+        _ensure_user_route_completions_table(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT route_id
+                FROM user_route_completions
+                WHERE user_id = %s
+                ORDER BY last_completed_at DESC
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+        return jsonify([int(r[0]) for r in rows]), 200
     finally:
         conn.close()
 

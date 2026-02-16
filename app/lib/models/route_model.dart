@@ -9,6 +9,7 @@ class RouteModel {
   final String estimatedTime; // estimated_time
   final int creatorId; // creator_id
   final String? creatorName; // creator_name
+  final bool completedByUser; // completed_by_user
 
   final String culturalSummary; // cultural_summary
   final bool hasHistoricalValue; // has_historical_value
@@ -29,6 +30,7 @@ class RouteModel {
     required this.estimatedTime,
     required this.creatorId,
     this.creatorName,
+    this.completedByUser = false,
     required this.culturalSummary,
     required this.hasHistoricalValue,
     required this.hasArchaeology,
@@ -99,6 +101,7 @@ class RouteModel {
       estimatedTime: (json['estimated_time'] ?? '').toString(),
       creatorId: _toInt(json['creator_id']),
       creatorName: json['creator_name']?.toString(),
+      completedByUser: _toBool(json['completed_by_user'] ?? false),
       culturalSummary: (json['cultural_summary'] ?? '').toString(),
       hasHistoricalValue: _toBool(json['has_historical_value']),
       hasArchaeology: _toBool(json['has_archaeology']),
@@ -120,6 +123,7 @@ class RouteModel {
       'estimated_time': estimatedTime,
       'creator_id': creatorId,
       'creator_name': creatorName,
+      'completed_by_user': completedByUser,
       'cultural_summary': culturalSummary,
       'has_historical_value': hasHistoricalValue,
       'has_archaeology': hasArchaeology,
@@ -141,6 +145,7 @@ class RouteModel {
     String? estimatedTime,
     int? creatorId,
     String? creatorName,
+    bool? completedByUser,
     String? culturalSummary,
     bool? hasHistoricalValue,
     bool? hasArchaeology,
@@ -159,6 +164,7 @@ class RouteModel {
       estimatedTime: estimatedTime ?? this.estimatedTime,
       creatorId: creatorId ?? this.creatorId,
       creatorName: creatorName ?? this.creatorName,
+      completedByUser: completedByUser ?? this.completedByUser,
       culturalSummary: culturalSummary ?? this.culturalSummary,
       hasHistoricalValue: hasHistoricalValue ?? this.hasHistoricalValue,
       hasArchaeology: hasArchaeology ?? this.hasArchaeology,

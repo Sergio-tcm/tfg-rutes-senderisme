@@ -61,6 +61,27 @@ class RouteCard extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        route.completedByUser ? Icons.check_circle : Icons.radio_button_unchecked,
+                        size: 16,
+                        color: route.completedByUser ? Colors.green[700] : Colors.grey[600],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        route.completedByUser ? 'Ruta completada' : 'Ruta no completada',
+                        style: TextStyle(
+                          color: route.completedByUser ? Colors.green[800] : Colors.grey[700],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 6),
 
                   // Ubicación
                   Row(

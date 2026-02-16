@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 import requests
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from db import get_connection
 import math
 from utils.geo import haversine_m
@@ -11,6 +11,32 @@ from routes.route_cultural_routes import _sync_route_cultural_booleans, _get_gpx
 routes_bp = Blueprint("routes", __name__, url_prefix="/routes")
 
 cultural_bp = Blueprint("cultural", __name__)
+
+
+def _ensure_user_route_completions_table(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_route_completions (
+                completion_id SERIAL PRIMARY KEY,
+                user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                route_id INT NOT NULL REFERENCES routes(route_id) ON DELETE CASCADE,
+                completion_count INT NOT NULL DEFAULT 1,
+                first_completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (user_id, route_id)
+            )
+            """
+        )
+
+
+def _get_optional_user_id():
+    try:
+        verify_jwt_in_request(optional=True)
+        identity = get_jwt_identity()
+        return int(identity) if identity is not None else None
+    except Exception:
+        return None
 
 def normalize_difficulty(difficulty: str) -> str:
     """
@@ -42,20 +68,31 @@ def normalize_difficulty(difficulty: str) -> str:
 
 @routes_bp.route("", methods=["GET"])
 def get_routes():
+    user_id = _get_optional_user_id()
     conn = get_connection()
     cur = conn.cursor()
+
+    _ensure_user_route_completions_table(conn)
 
     cur.execute("""
         SELECT
           r.route_id, r.name, r.description, r.distance_km, r.difficulty,
           r.elevation_gain, r.location, r.estimated_time, r.creator_id,
           r.cultural_summary, r.has_historical_value, r.has_archaeology,
-          r.has_architecture, r.has_natural_interest, r.created_at,
-          u.name as creator_name
+                    r.has_architecture, r.has_natural_interest, r.created_at,
+                    u.name as creator_name,
+                    CASE
+                        WHEN %s IS NULL THEN FALSE
+                        ELSE EXISTS (
+                            SELECT 1
+                            FROM user_route_completions urc
+                            WHERE urc.user_id = %s AND urc.route_id = r.route_id
+                        )
+                    END as completed_by_user
         FROM routes r
         LEFT JOIN users u ON u.user_id = r.creator_id
         ORDER BY r.created_at DESC
-    """)
+        """, (user_id, user_id))
     rows = cur.fetchall()
 
     cur.close()
@@ -92,6 +129,7 @@ def get_routes():
             "has_natural_interest": bool(r[13]),
             "created_at": r[14].isoformat() if r[14] else None,
             "creator_name": r[15],
+            "completed_by_user": bool(r[16]),
         })
 
     return jsonify(routes), 200
@@ -297,6 +335,7 @@ def cultural_items_near():
 
 @cultural_bp.route("/cultural-items/<int:item_id>/routes", methods=["GET"])
 def routes_for_cultural_item(item_id: int):
+    user_id = _get_optional_user_id()
     limit = request.args.get("limit", default=5, type=int)
     radius_m = request.args.get("radius_m", default=1000, type=int)
     step = request.args.get("step", default=30, type=int)
@@ -311,6 +350,8 @@ def routes_for_cultural_item(item_id: int):
 
     conn = get_connection()
     cur = conn.cursor()
+
+    _ensure_user_route_completions_table(conn)
 
     cur.execute(
         """
@@ -445,8 +486,16 @@ def routes_for_cultural_item(item_id: int):
                     r.route_id, r.name, r.description, r.distance_km, r.difficulty,
                     r.elevation_gain, r.location, r.estimated_time, r.creator_id,
                     r.cultural_summary, r.has_historical_value, r.has_archaeology,
-                    r.has_architecture, r.has_natural_interest, r.created_at,
-                    rci.distance_m
+                                        r.has_architecture, r.has_natural_interest, r.created_at,
+                                        rci.distance_m,
+                                        CASE
+                                            WHEN %s IS NULL THEN FALSE
+                                            ELSE EXISTS (
+                                                SELECT 1
+                                                FROM user_route_completions urc
+                                                WHERE urc.user_id = %s AND urc.route_id = r.route_id
+                                            )
+                                        END as completed_by_user
                 FROM route_cultural_items rci
                 JOIN routes r ON r.route_id = rci.route_id
                 WHERE rci.item_id = %s
@@ -454,7 +503,7 @@ def routes_for_cultural_item(item_id: int):
         ORDER BY rci.distance_m ASC NULLS LAST, r.created_at DESC
         LIMIT %s
         """,
-                (item_id, radius_m, limit),
+                                (user_id, user_id, item_id, radius_m, limit),
     )
 
     rows = cur.fetchall()
@@ -489,6 +538,7 @@ def routes_for_cultural_item(item_id: int):
             "has_natural_interest": bool(r[13]),
             "created_at": r[14].isoformat() if r[14] else None,
             "distance_m": float(r[15]) if r[15] is not None else None,
+            "completed_by_user": bool(r[16]),
         })
 
     return jsonify(routes), 200

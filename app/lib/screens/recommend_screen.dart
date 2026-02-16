@@ -24,6 +24,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
   bool _useDistanceOverride = false;
   double _distanceOverride = 8.0;
   String _maxDifficulty = 'Molt Difícil';
+  bool _maxDifficultyTouched = false;
   bool _boostCulture = false;
 
   Future<_RecoData>? _dataFuture;
@@ -38,7 +39,12 @@ class _RecommendScreenState extends State<RecommendScreen> {
     final routes = await _routesService.getRoutes();
     final prefsMap = await _prefsService.getPreferences();
     final prefs = _prefsFromApi(prefsMap);
-    return _RecoData(routes: routes, prefs: prefs);
+    final effectiveMaxDifficulty = _effectiveMaxDifficultyFromApi(prefsMap);
+    return _RecoData(
+      routes: routes,
+      prefs: prefs,
+      effectiveMaxDifficulty: effectiveMaxDifficulty,
+    );
   }
 
   UserPreferencesModel _prefsFromApi(Map<String, dynamic> data) {
@@ -52,7 +58,35 @@ class _RecommendScreenState extends State<RecommendScreen> {
         updatedAt: null,
       );
     }
-    return UserPreferencesModel.fromJson(data);
+
+    final effectiveFitness = data['effective_fitness_level']?.toString();
+    final effectiveDistanceRaw = data['effective_preferred_distance'];
+    final effectiveDistance = (effectiveDistanceRaw is num)
+        ? effectiveDistanceRaw.toDouble()
+        : null;
+
+    return UserPreferencesModel(
+      prefId: (data['pref_id'] as num).toInt(),
+      userId: (data['user_id'] as num).toInt(),
+      fitnessLevel: effectiveFitness ?? data['fitness_level']?.toString(),
+      preferredDistance: effectiveDistance ??
+          (data['preferred_distance'] is num
+              ? (data['preferred_distance'] as num).toDouble()
+              : null),
+      environmentType: data['environment_type']?.toString(),
+      culturalInterest: data['cultural_interest']?.toString(),
+      updatedAt: data['updated_at'] == null
+          ? null
+          : DateTime.parse(data['updated_at'].toString()),
+    );
+  }
+
+  String? _effectiveMaxDifficultyFromApi(Map<String, dynamic> data) {
+    final value = data['effective_max_difficulty']?.toString().trim();
+    if (value == null || value.isEmpty) return null;
+    const allowed = {'Fàcil', 'Mitjana', 'Difícil', 'Molt Difícil'};
+    if (allowed.contains(value)) return value;
+    return null;
   }
 
   UserPreferencesModel _applyOverrides(UserPreferencesModel base) {
@@ -75,14 +109,6 @@ class _RecommendScreenState extends State<RecommendScreen> {
     setState(() {
       _dataFuture = _loadData();
     });
-  }
-
-  List<RouteModel> _applyHardFilters(List<RouteModel> routes) {
-    final maxRank = _difficultyRank(_maxDifficulty);
-    return routes.where((r) {
-      final rank = _difficultyRank(r.difficulty);
-      return rank <= maxRank;
-    }).toList();
   }
 
   int _difficultyRank(String difficulty) {
@@ -137,12 +163,20 @@ class _RecommendScreenState extends State<RecommendScreen> {
               final data = snapshot.data;
               final routes = data?.routes ?? [];
               final basePrefs = data?.prefs;
+              final adaptiveMaxDifficulty = data?.effectiveMaxDifficulty;
               if (routes.isEmpty) {
                 return const Center(child: Text('No hi ha rutes disponibles'));
               }
 
+              final maxDifficultyForRanking = _maxDifficultyTouched
+                  ? _maxDifficulty
+                  : (adaptiveMaxDifficulty ?? _maxDifficulty);
+
               // 1) Aplicamos filtros duros
-              final filtered = _applyHardFilters(routes);
+              final filtered = routes.where((r) {
+                final rank = _difficultyRank(r.difficulty);
+                return rank <= _difficultyRank(maxDifficultyForRanking);
+              }).toList();
 
               // 2) Construimos prefs (por ahora desde filtros)
               final prefs = basePrefs == null
@@ -160,7 +194,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
               final ranked = _recoService.rankRoutes(
                 routes: filtered,
                 prefs: prefs,
-                maxDifficultyRank: _difficultyRank(_maxDifficulty),
+                maxDifficultyRank: _difficultyRank(maxDifficultyForRanking),
                 culturalBoostWeight: _boostCulture ? 1.8 : 1.0,
               );
               final recommended = ranked.isEmpty ? null : ranked.first;
@@ -178,7 +212,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
                         basePrefs: basePrefs,
                         useDistanceOverride: _useDistanceOverride,
                         distanceOverride: _distanceOverride,
-                        maxDifficulty: _maxDifficulty,
+                        maxDifficulty: maxDifficultyForRanking,
                         boostCulture: _boostCulture,
                         onToggleDistanceOverride: (v) {
                           setState(() => _useDistanceOverride = v);
@@ -187,7 +221,10 @@ class _RecommendScreenState extends State<RecommendScreen> {
                           setState(() => _distanceOverride = v);
                         },
                         onDifficultyChanged: (v) {
-                          setState(() => _maxDifficulty = v);
+                          setState(() {
+                            _maxDifficulty = v;
+                            _maxDifficultyTouched = true;
+                          });
                           _loadRecommendations();
                         },
                         onToggleBoostCulture: (v) {
@@ -277,10 +314,12 @@ class _RecommendScreenState extends State<RecommendScreen> {
 class _RecoData {
   final List<RouteModel> routes;
   final UserPreferencesModel prefs;
+  final String? effectiveMaxDifficulty;
 
   const _RecoData({
     required this.routes,
     required this.prefs,
+    this.effectiveMaxDifficulty,
   });
 }
 

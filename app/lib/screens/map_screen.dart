@@ -511,6 +511,10 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     if (_activeNavigationRouteId != null) {
+      try {
+        await _socialService.completeRoute(_activeNavigationRouteId!);
+      } catch (_) {}
+
       await _showCompletionFeedbackSheet(_activeNavigationRouteId!);
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 180));
@@ -1388,6 +1392,16 @@ class _MapScreenState extends State<MapScreen> {
     final distanceText = item.distanceM != null ? _formatDistanceM(item.distanceM!) : null;
 
     final trailingWidgets = <Widget>[];
+    trailingWidgets.add(
+      Tooltip(
+        message: route.completedByUser ? 'Ruta completada' : 'Ruta no completada',
+        child: Icon(
+          route.completedByUser ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: route.completedByUser ? Colors.green[700] : Colors.grey[600],
+          size: 18,
+        ),
+      ),
+    );
     if (distanceText != null) {
       trailingWidgets.add(
         Container(

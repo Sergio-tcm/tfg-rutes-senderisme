@@ -9,7 +9,11 @@ import 'token_storage.dart';
 class RoutesService {
   Future<List<RouteModel>> getRoutes() async {
     final url = Uri.parse('${ApiConfig.baseUrl}/routes');
-    final res = await http.get(url);
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+    final res = await http.get(url, headers: headers);
 
     if (res.statusCode != 200) {
       throw Exception('Error carregant rutes (${res.statusCode})');
@@ -38,7 +42,11 @@ class RoutesService {
     final url = Uri.parse('${ApiConfig.baseUrl}/cultural-items/$itemId/routes')
         .replace(queryParameters: queryParameters);
 
-    final res = await http.get(url);
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+    final res = await http.get(url, headers: headers);
 
     if (res.statusCode != 200) {
       throw Exception('Error carregant rutes associades');

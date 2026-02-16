@@ -146,4 +146,46 @@ class SocialService {
 
     return data.map<RouteModel>((e) => RouteModel.fromJson(e)).toList();
   }
+
+  Future<Map<String, dynamic>> completeRoute(int routeId) async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('No hi ha sessió');
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/routes/$routeId/complete');
+    final res = await http.post(url, headers: {
+      'Authorization': 'Bearer $token',
+    });
+
+    final data = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(data['error'] ?? 'Error marcant ruta com completada');
+    }
+
+    return data as Map<String, dynamic>;
+  }
+
+  Future<Set<int>> getCompletedRouteIds() async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('No hi ha sessió');
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/routes/completed/ids');
+    final res = await http.get(url, headers: {
+      'Authorization': 'Bearer $token',
+    });
+
+    if (res.statusCode != 200) {
+      throw Exception('Error carregant rutes completades');
+    }
+
+    final data = jsonDecode(res.body);
+    if (data is! List) {
+      throw Exception('Resposta inesperada');
+    }
+
+    return data.map<int>((e) => (e as num).toInt()).toSet();
+  }
 }
