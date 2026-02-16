@@ -503,6 +503,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _finishNavigationFlow() async {
     setState(() => _navActionsExpanded = false);
+    String? postFinishMessage;
 
     final completed = await _showFinishDecisionSheet();
     if (!completed) {
@@ -517,14 +518,10 @@ class _MapScreenState extends State<MapScreen> {
       if (canPersistCompletion) {
         try {
           final completionResult = await _socialService.completeRoute(routeIdToComplete);
-          if (mounted) {
-            final message = (completionResult['preference_update_message']?.toString().trim().isNotEmpty ?? false)
-                ? completionResult['preference_update_message'].toString()
-                : 'Ruta completada.';
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
-            );
-          }
+          postFinishMessage =
+              (completionResult['preference_update_message']?.toString().trim().isNotEmpty ?? false)
+              ? completionResult['preference_update_message'].toString()
+              : 'Ruta completada.';
         } catch (e, st) {
           debugPrint('[ROUTE_COMPLETE_ERROR] route_id=$routeIdToComplete message=${e.toString().replaceFirst('Exception: ', '')}');
           debugPrint('[ROUTE_COMPLETE_STACK] $st');
@@ -538,6 +535,25 @@ class _MapScreenState extends State<MapScreen> {
 
     await _stopNavigation(clearPath: true);
     _clearNavigationVisualState();
+
+    if (!mounted || postFinishMessage == null || postFinishMessage.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(postFinishMessage!),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Tancar',
+            onPressed: () {},
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _finishNavigationFlowAutomatically() async {
