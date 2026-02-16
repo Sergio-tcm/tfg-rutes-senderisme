@@ -85,6 +85,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _navActionsExpanded = false;
   int? _activeNavigationRouteId;
   bool _autoFinishingRoute = false;
+  final bool _allowPreStartCompletionForTesting = true;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -511,9 +512,20 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     if (_activeNavigationRouteId != null) {
-      try {
-        await _socialService.completeRoute(_activeNavigationRouteId!);
-      } catch (_) {}
+      final canPersistCompletion = _routeStartReachedNotified || _allowPreStartCompletionForTesting;
+      if (canPersistCompletion) {
+        try {
+          final completionResult = await _socialService.completeRoute(_activeNavigationRouteId!);
+          if (mounted) {
+            final message = (completionResult['preference_update_message']?.toString().trim().isNotEmpty ?? false)
+                ? completionResult['preference_update_message'].toString()
+                : 'Ruta completada.';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(message)),
+            );
+          }
+        } catch (_) {}
+      }
 
       await _showCompletionFeedbackSheet(_activeNavigationRouteId!);
       if (!mounted) return;

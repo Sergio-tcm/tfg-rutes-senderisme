@@ -23,6 +23,157 @@ def _ensure_user_route_completions_table(conn):
         )
 
 
+def _fitness_to_rank(fitness: str) -> int:
+    value = (fitness or "").strip().lower()
+    if value in {"alta", "alto", "high"}:
+        return 2
+    if value in {"mitjana", "mitja", "medio", "medium"}:
+        return 1
+    return 0
+
+
+def _rank_to_fitness(rank: int) -> str:
+    if rank >= 2:
+        return "alta"
+    if rank <= 0:
+        return "baixa"
+    return "mitjana"
+
+
+def _rank_to_max_difficulty(rank: int) -> str:
+    if rank >= 2:
+        return "Difícil"
+    if rank <= 0:
+        return "Fàcil"
+    return "Mitjana"
+
+
+def _compute_adaptive_signals(base_fitness: str, base_distance: float, learning: dict):
+    total_completions = int(learning.get("total_completions") or 0)
+    if total_completions <= 0:
+        base_rank = _fitness_to_rank(base_fitness)
+        return {
+            "effective_fitness_level": _rank_to_fitness(base_rank),
+            "effective_max_difficulty": _rank_to_max_difficulty(base_rank),
+            "effective_preferred_distance": float(base_distance),
+        }
+
+    learned_weight = min(0.4, (total_completions / 10.0) * 0.4)
+    base_weight = 1.0 - learned_weight
+
+    base_rank = float(_fitness_to_rank(base_fitness))
+    learned_rank = float(learning.get("avg_difficulty_rank") or 0.0)
+    effective_rank = (base_rank * base_weight) + (learned_rank * learned_weight)
+    effective_rank_int = int(round(max(0.0, min(2.0, effective_rank))))
+
+    learned_distance = float(learning.get("avg_distance_km") or base_distance)
+    effective_distance = (float(base_distance) * base_weight) + (learned_distance * learned_weight)
+
+    return {
+        "effective_fitness_level": _rank_to_fitness(effective_rank_int),
+        "effective_max_difficulty": _rank_to_max_difficulty(effective_rank_int),
+        "effective_preferred_distance": round(max(1.0, effective_distance), 2),
+    }
+
+
+def _load_adaptive_snapshot(conn, user_id: int):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT fitness_level, preferred_distance
+            FROM user_preferences
+            WHERE user_id = %s
+            """,
+            (user_id,),
+        )
+        pref = cur.fetchone()
+
+        if pref is None:
+            return None
+
+        base_fitness = pref[0] or "baixa"
+        base_distance = float(pref[1]) if pref[1] is not None else 10.0
+
+        cur.execute(
+            """
+            SELECT
+                COALESCE(SUM(urc.completion_count), 0) AS total_completions,
+                COALESCE(
+                    SUM(urc.completion_count * COALESCE(r.distance_km, 0))
+                    / NULLIF(SUM(urc.completion_count), 0),
+                    0
+                ) AS avg_distance_km,
+                COALESCE(
+                    SUM(
+                        urc.completion_count *
+                        CASE
+                            WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN 3
+                            WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' THEN 2
+                            WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN 1
+                            ELSE 0
+                        END
+                    )
+                    / NULLIF(SUM(urc.completion_count), 0),
+                    0
+                ) AS avg_difficulty_rank
+            FROM user_route_completions urc
+            JOIN routes r ON r.route_id = urc.route_id
+            WHERE urc.user_id = %s
+            """,
+            (user_id,),
+        )
+        learning_row = cur.fetchone()
+
+    learning = {
+        "total_completions": int(learning_row[0] or 0),
+        "avg_distance_km": float(learning_row[1] or 0),
+        "avg_difficulty_rank": float(learning_row[2] or 0),
+    }
+    adaptive = _compute_adaptive_signals(base_fitness, base_distance, learning)
+    adaptive["total_completed_routes"] = learning["total_completions"]
+    return adaptive
+
+
+def _build_preferences_update_payload(before, after):
+    if before is None or after is None:
+        return {
+            "preferences_updated": False,
+            "preference_update_message": "Ruta completada. Preferències sense canvis.",
+        }
+
+    changed_max_diff = before.get("effective_max_difficulty") != after.get("effective_max_difficulty")
+    changed_fitness = before.get("effective_fitness_level") != after.get("effective_fitness_level")
+    before_dist = float(before.get("effective_preferred_distance") or 0)
+    after_dist = float(after.get("effective_preferred_distance") or 0)
+    changed_distance = abs(after_dist - before_dist) >= 0.2
+
+    updated = changed_max_diff or changed_fitness or changed_distance
+
+    if updated:
+        changes = []
+        if changed_max_diff:
+            changes.append(
+                f"dificultat recomanada: {before.get('effective_max_difficulty')} → {after.get('effective_max_difficulty')}"
+            )
+        if changed_fitness:
+            changes.append(
+                f"perfil físic: {before.get('effective_fitness_level')} → {after.get('effective_fitness_level')}"
+            )
+        if changed_distance:
+            changes.append(
+                f"distància recomanada: {before_dist:.1f} km → {after_dist:.1f} km"
+            )
+        return {
+            "preferences_updated": True,
+            "preference_update_message": "Preferències actualitzades: " + "; ".join(changes),
+        }
+
+    return {
+        "preferences_updated": False,
+        "preference_update_message": "Ruta completada. Preferències iguals de moment.",
+    }
+
+
 @social_bp.post("/<int:route_id>/like")
 @jwt_required()
 def like_route(route_id: int):
@@ -188,6 +339,7 @@ def complete_route(route_id: int):
     conn = get_connection()
     try:
         _ensure_user_route_completions_table(conn)
+        before_snapshot = _load_adaptive_snapshot(conn, user_id)
 
         with conn.cursor() as cur:
             cur.execute(
@@ -218,6 +370,9 @@ def complete_route(route_id: int):
             )
             row = cur.fetchone()
 
+        after_snapshot = _load_adaptive_snapshot(conn, user_id)
+        update_payload = _build_preferences_update_payload(before_snapshot, after_snapshot)
+
         conn.commit()
         return jsonify({
             "route_id": route_id,
@@ -225,6 +380,10 @@ def complete_route(route_id: int):
             "completed": True,
             "completion_count": int(row[0]),
             "last_completed_at": row[1].isoformat() if row[1] else None,
+            "preferences_updated": update_payload["preferences_updated"],
+            "preference_update_message": update_payload["preference_update_message"],
+            "effective_max_difficulty": (after_snapshot or {}).get("effective_max_difficulty"),
+            "effective_preferred_distance": (after_snapshot or {}).get("effective_preferred_distance"),
         }), 200
     finally:
         conn.close()
