@@ -34,6 +34,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   late final StreamSubscription<MapEvent> _mapEventSubscription;
+  StreamSubscription<Position>? _positionSubscription;
 
   // GPX / Route
   final _routeFilesService = RouteFilesService();
@@ -67,6 +68,13 @@ class _MapScreenState extends State<MapScreen> {
 
   final Map<int, List<LatLng>> _routeTrackCache = {};
   final List<int> _routeTrackCacheOrder = [];
+  bool _navigationMode = false;
+  bool _followUser = true;
+  List<LatLng> _navigationPath = const [];
+  List<LatLng> _navigationCompletedPath = const [];
+  double? _distanceToPathM;
+  double? _remainingDistanceKm;
+  DateTime? _lastOffRouteAlert;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -93,7 +101,120 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _mapEventSubscription.cancel();
+    _positionSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _startNavigation(List<LatLng> path) async {
+    if (path.length < 2 || !mounted) return;
+
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+
+    setState(() {
+      _navigationMode = true;
+      _followUser = true;
+      _navigationPath = path;
+      _navigationCompletedPath = const [];
+      _distanceToPathM = null;
+      _remainingDistanceKm = null;
+      _lastOffRouteAlert = null;
+    });
+
+    try {
+      final stream = await _locationService.getPositionStream(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 4,
+      );
+
+      _positionSubscription = stream.listen(
+        _onPositionUpdate,
+        onError: (_) {
+          if (!mounted) return;
+          setState(() {
+            _navigationMode = false;
+            _distanceToPathM = null;
+            _remainingDistanceKm = null;
+          });
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _navigationMode = false;
+        _distanceToPathM = null;
+        _remainingDistanceKm = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _stopNavigation({bool clearPath = false}) async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+
+    if (!mounted) return;
+    setState(() {
+      _navigationMode = false;
+      _followUser = true;
+      _distanceToPathM = null;
+      _remainingDistanceKm = null;
+      _lastOffRouteAlert = null;
+      _navigationCompletedPath = const [];
+      if (clearPath) {
+        _navigationPath = const [];
+      }
+    });
+  }
+
+  void _onPositionUpdate(Position pos) {
+    if (!mounted) return;
+
+    final point = LatLng(pos.latitude, pos.longitude);
+    final path = _navigationPath;
+
+    int nearestIndex = -1;
+    double minDistanceM = double.infinity;
+
+    if (_navigationMode && path.isNotEmpty) {
+      for (var i = 0; i < path.length; i++) {
+        final distance = _haversineKm(point, path[i]) * 1000;
+        if (distance < minDistanceM) {
+          minDistanceM = distance;
+          nearestIndex = i;
+        }
+      }
+    }
+
+    setState(() {
+      _currentPosition = point;
+      if (_navigationMode && path.isNotEmpty && nearestIndex >= 0) {
+        _distanceToPathM = minDistanceM;
+        _navigationCompletedPath = path.sublist(0, nearestIndex + 1);
+        final remaining = path.sublist(nearestIndex);
+        _remainingDistanceKm = _trackDistanceKm(remaining);
+      }
+    });
+
+    if (_navigationMode && _followUser) {
+      final currentZoom = _mapController.camera.zoom;
+      _mapController.move(point, currentZoom < 15 ? 15 : currentZoom);
+    }
+
+    if (_navigationMode && minDistanceM.isFinite && minDistanceM > 50) {
+      final now = DateTime.now();
+      final shouldNotify = _lastOffRouteAlert == null ||
+          now.difference(_lastOffRouteAlert!) >= const Duration(seconds: 20);
+      if (shouldNotify && mounted) {
+        _lastOffRouteAlert = now;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('T\'has desviat de la ruta (més de 50 m)')),
+        );
+      }
+    }
   }
 
   Future<void> _loadNearMe() async {
@@ -696,6 +817,8 @@ class _MapScreenState extends State<MapScreen> {
             .toList();
       });
 
+          await _startNavigation(pts);
+
       // Opcional: encuadrar la ruta en pantalla
       if (pts.length >= 2) {
         final bounds = LatLngBounds.fromPoints(pts);
@@ -757,6 +880,11 @@ class _MapScreenState extends State<MapScreen> {
             .toList();
         _currentDestination = null;
       });
+
+          final navPath = <LatLng>[];
+          navPath.addAll(walkingPts);
+          navPath.addAll(track);
+          await _startNavigation(navPath);
 
       final allPoints = <LatLng>[];
       allPoints.addAll(walkingPts);
@@ -1189,6 +1317,17 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
 
+              if (_navigationCompletedPath.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _navigationCompletedPath,
+                      strokeWidth: 7,
+                      color: Colors.orange,
+                    ),
+                  ],
+                ),
+
               // markers inicio/fin si hay track
               if (_track.isNotEmpty)
                 MarkerLayer(
@@ -1317,6 +1456,7 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                           TextButton(
                             onPressed: () {
+                              _stopNavigation(clearPath: true);
                               setState(() {
                                 if (widget.routeId == null) {
                                   _track = const [];
@@ -1333,6 +1473,62 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ],
                       ),
+                      Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: (_walkingTrack.length < 2)
+                                ? null
+                                : () async {
+                                    if (_navigationMode) {
+                                      await _stopNavigation();
+                                    } else {
+                                      final navPath = <LatLng>[];
+                                      navPath.addAll(_walkingTrack);
+                                      if (_track.isNotEmpty && _currentDestination == null) {
+                                        navPath.addAll(_track);
+                                      }
+                                      await _startNavigation(navPath);
+                                    }
+                                  },
+                            icon: Icon(_navigationMode ? Icons.pause_circle : Icons.navigation),
+                            label: Text(_navigationMode ? 'Atura navegació' : 'Inicia navegació'),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: !_navigationMode
+                                ? null
+                                : () {
+                                    setState(() => _followUser = !_followUser);
+                                  },
+                            icon: Icon(_followUser ? Icons.gps_fixed : Icons.gps_not_fixed),
+                            label: Text(_followUser ? 'Seguint posició' : 'Posició lliure'),
+                          ),
+                        ],
+                      ),
+                      if (_navigationMode && _distanceToPathM != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Desviació de la ruta: ${_distanceToPathM!.toStringAsFixed(0)} m',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: (_distanceToPathM ?? 0) > 50 ? Colors.red[700] : Colors.green[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      if (_navigationMode && _remainingDistanceKm != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Distància restant: ${_remainingDistanceKm!.toStringAsFixed(2)} km',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                       if (_walkingSteps.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),

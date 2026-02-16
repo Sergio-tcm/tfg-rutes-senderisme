@@ -39,4 +39,18 @@ class LocationService {
       locationSettings: settings,
     );
   }
+
+  Future<Stream<Position>> getPositionStream({
+    LocationAccuracy accuracy = LocationAccuracy.bestForNavigation,
+    int distanceFilter = 5,
+  }) async {
+    await _ensurePermissions();
+
+    final settings = LocationSettings(
+      accuracy: accuracy,
+      distanceFilter: distanceFilter,
+    );
+
+    return Geolocator.getPositionStream(locationSettings: settings);
+  }
 }
