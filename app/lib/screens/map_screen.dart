@@ -64,6 +64,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _routingLoading = false;
   String? _routingError;
   CulturalItem? _currentDestination;
+  LatLng? _currentRouteStartDestination;
   List<String> _walkingSteps = const [];
 
   final Map<int, List<LatLng>> _routeTrackCache = {};
@@ -75,6 +76,8 @@ class _MapScreenState extends State<MapScreen> {
   double? _distanceToPathM;
   double? _remainingDistanceKm;
   DateTime? _lastOffRouteAlert;
+  DateTime? _lastAutoRecalcAt;
+  bool _autoRecalculatingRoute = false;
 
   // valores iniciales "neutros"
   static const LatLng _defaultCenter = LatLng(41.3874, 2.1686); // BCN
@@ -119,6 +122,9 @@ class _MapScreenState extends State<MapScreen> {
       _distanceToPathM = null;
       _remainingDistanceKm = null;
       _lastOffRouteAlert = null;
+      _lastAutoRecalcAt = null;
+      _autoRecalculatingRoute = false;
+      _currentRouteStartDestination = null;
     });
 
     try {
@@ -135,6 +141,8 @@ class _MapScreenState extends State<MapScreen> {
             _navigationMode = false;
             _distanceToPathM = null;
             _remainingDistanceKm = null;
+            _autoRecalculatingRoute = false;
+            _currentRouteStartDestination = null;
           });
         },
       );
@@ -144,6 +152,8 @@ class _MapScreenState extends State<MapScreen> {
         _navigationMode = false;
         _distanceToPathM = null;
         _remainingDistanceKm = null;
+        _autoRecalculatingRoute = false;
+        _currentRouteStartDestination = null;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -163,11 +173,130 @@ class _MapScreenState extends State<MapScreen> {
       _distanceToPathM = null;
       _remainingDistanceKm = null;
       _lastOffRouteAlert = null;
+      _lastAutoRecalcAt = null;
+      _autoRecalculatingRoute = false;
       _navigationCompletedPath = const [];
+      _currentRouteStartDestination = null;
       if (clearPath) {
         _navigationPath = const [];
       }
     });
+  }
+
+  Future<void> _autoRecalculateToCurrentDestination(LatLng currentPos) async {
+    final destination = _currentDestination;
+    if (!mounted || destination == null || !_navigationMode || _autoRecalculatingRoute) {
+      return;
+    }
+
+    setState(() {
+      _autoRecalculatingRoute = true;
+    });
+
+    try {
+      final result = await _routingService.walkingRoute(
+        startLat: currentPos.latitude,
+        startLon: currentPos.longitude,
+        endLat: destination.latitude,
+        endLon: destination.longitude,
+      );
+
+      final pts = _downsamplePoints(
+        result.polyline.map((p) => LatLng(p[0], p[1])).toList(),
+        maxPoints: 1000,
+      );
+
+      if (pts.length < 2 || !mounted) return;
+
+      setState(() {
+        _walkingTrack = pts;
+        _walkingDistanceKm = result.distanceKm;
+        _walkingDurationMin = ((result.distanceKm / 4.5) * 60).round();
+        _walkingSteps = result.steps
+            .where((s) => s.toLowerCase() != 'altres')
+            .map(_normalizeStepName)
+            .where((s) => s.isNotEmpty)
+            .toList();
+        _navigationPath = pts;
+        _navigationCompletedPath = const [];
+        _distanceToPathM = null;
+        _remainingDistanceKm = result.distanceKm;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ruta recalculada automàticament')),
+      );
+    } catch (_) {
+      // mantenim la ruta actual si no es pot recalcular
+    } finally {
+      if (mounted) {
+        setState(() {
+          _autoRecalculatingRoute = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _autoRecalculateToRouteStart(LatLng currentPos) async {
+    final routeStart = _currentRouteStartDestination;
+    if (!mounted || routeStart == null || !_navigationMode || _autoRecalculatingRoute || _track.length < 2) {
+      return;
+    }
+
+    setState(() {
+      _autoRecalculatingRoute = true;
+    });
+
+    try {
+      final result = await _routingService.walkingRoute(
+        startLat: currentPos.latitude,
+        startLon: currentPos.longitude,
+        endLat: routeStart.latitude,
+        endLon: routeStart.longitude,
+      );
+
+      final walkingPts = _downsamplePoints(
+        result.polyline.map((p) => LatLng(p[0], p[1])).toList(),
+        maxPoints: 1000,
+      );
+
+      if (walkingPts.length < 2 || !mounted) return;
+
+      final routeDistanceKm = _trackDistanceKm(_track);
+      final totalDistanceKm = result.distanceKm + routeDistanceKm;
+      final totalDurationMin = ((totalDistanceKm / 4.5) * 60).round();
+
+      final navPath = <LatLng>[];
+      navPath.addAll(walkingPts);
+      navPath.addAll(_track);
+
+      setState(() {
+        _walkingTrack = walkingPts;
+        _walkingDistanceKm = totalDistanceKm;
+        _walkingDurationMin = totalDurationMin;
+        _walkingSteps = result.steps
+            .where((s) => s.toLowerCase() != 'altres')
+            .map(_normalizeStepName)
+            .where((s) => s.isNotEmpty)
+            .toList();
+        _navigationPath = navPath;
+        _navigationCompletedPath = const [];
+        _distanceToPathM = null;
+        _remainingDistanceKm = totalDistanceKm;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ruta fins a l\'inici recalculada automàticament')),
+      );
+    } catch (_) {
+      // mantenim la ruta actual si no es pot recalcular
+    } finally {
+      if (mounted) {
+        setState(() {
+          _autoRecalculatingRoute = false;
+        });
+      }
+    }
   }
 
   void _onPositionUpdate(Position pos) {
@@ -213,6 +342,19 @@ class _MapScreenState extends State<MapScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('T\'has desviat de la ruta (més de 50 m)')),
         );
+      }
+
+      final canAutoRecalc = _currentDestination != null && !_autoRecalculatingRoute;
+      final canAutoRecalcRouteStart = _currentRouteStartDestination != null && !_autoRecalculatingRoute;
+      final enoughTimeSinceLastRecalc = _lastAutoRecalcAt == null ||
+          now.difference(_lastAutoRecalcAt!) >= const Duration(seconds: 30);
+      if ((canAutoRecalc || canAutoRecalcRouteStart) && enoughTimeSinceLastRecalc) {
+        _lastAutoRecalcAt = now;
+        if (canAutoRecalc) {
+          unawaited(_autoRecalculateToCurrentDestination(point));
+        } else if (canAutoRecalcRouteStart) {
+          unawaited(_autoRecalculateToRouteStart(point));
+        }
       }
     }
   }
@@ -810,6 +952,7 @@ class _MapScreenState extends State<MapScreen> {
         _walkingDistanceKm = result.distanceKm;
         _walkingDurationMin = ((result.distanceKm / 4.5) * 60).round();
         _currentDestination = item;
+        _currentRouteStartDestination = null;
         _walkingSteps = result.steps
             .where((s) => s.toLowerCase() != 'altres')
             .map(_normalizeStepName)
@@ -879,6 +1022,7 @@ class _MapScreenState extends State<MapScreen> {
             .where((s) => s.isNotEmpty)
             .toList();
         _currentDestination = null;
+        _currentRouteStartDestination = start;
       });
 
           final navPath = <LatLng>[];
@@ -1466,6 +1610,7 @@ class _MapScreenState extends State<MapScreen> {
                                 _walkingDurationMin = null;
                                 _routingError = null;
                                 _currentDestination = null;
+                                _currentRouteStartDestination = null;
                                 _walkingSteps = const [];
                               });
                             },
@@ -1526,6 +1671,18 @@ class _MapScreenState extends State<MapScreen> {
                               fontSize: 13,
                               color: Colors.black87,
                               fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      if (_navigationMode && _autoRecalculatingRoute)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Recalculant ruta...',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.orange[800],
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
