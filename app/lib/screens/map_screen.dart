@@ -34,6 +34,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final MapController _mapController = MapController();
   late final StreamSubscription<MapEvent> _mapEventSubscription;
+  Timer? _mapRefreshDebounce;
   StreamSubscription<Position>? _positionSubscription;
 
   // GPX / Route
@@ -90,7 +91,11 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
 
     _mapEventSubscription = _mapController.mapEventStream.listen((event) {
-      setState(() {});
+      _mapRefreshDebounce?.cancel();
+      _mapRefreshDebounce = Timer(const Duration(milliseconds: 120), () {
+        if (!mounted) return;
+        setState(() {});
+      });
     });
 
     if (widget.routeId != null) {
@@ -104,6 +109,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _mapEventSubscription.cancel();
+    _mapRefreshDebounce?.cancel();
     _positionSubscription?.cancel();
     super.dispose();
   }
@@ -732,6 +738,262 @@ class _MapScreenState extends State<MapScreen> {
     return '${meters.toStringAsFixed(0)} m';
   }
 
+  List<CulturalItem> _visibleCulturalItems() {
+    return _nearItems
+        .where((item) =>
+            _walkingTrack.isEmpty ||
+            _currentDestination == null ||
+            item.id == _currentDestination!.id)
+        .toList();
+  }
+
+  Offset? _toWorldPixel(LatLng point, double zoom) {
+    if (!point.latitude.isFinite || !point.longitude.isFinite || !zoom.isFinite) {
+      return null;
+    }
+    if (point.latitude < -90 || point.latitude > 90 || point.longitude < -180 || point.longitude > 180) {
+      return null;
+    }
+
+    final safeZoom = zoom.clamp(1.0, 20.0);
+    final scale = 256.0 * pow(2.0, safeZoom).toDouble();
+    final x = (point.longitude + 180.0) / 360.0 * scale;
+    final sinLat = sin(point.latitude * pi / 180.0).clamp(-0.9999, 0.9999);
+    final y = (0.5 - log((1 + sinLat) / (1 - sinLat)) / (4 * pi)) * scale;
+    if (!x.isFinite || !y.isFinite) return null;
+    return Offset(x, y);
+  }
+
+  List<_ClusterCategory> _clusterCategories(_CulturalCluster cluster) {
+    final byCategory = <String, List<CulturalItem>>{};
+    for (final item in cluster.items) {
+      final category = _getCategory(item.type);
+      byCategory.putIfAbsent(category, () => <CulturalItem>[]).add(item);
+    }
+
+    final out = byCategory.entries
+        .map((e) => _ClusterCategory(
+              category: e.key,
+              count: e.value.length,
+              sampleType: e.value.first.type,
+            ))
+        .toList();
+
+    out.sort((a, b) {
+      final countCmp = b.count.compareTo(a.count);
+      if (countCmp != 0) return countCmp;
+      return a.category.compareTo(b.category);
+    });
+    return out;
+  }
+
+  List<_CulturalCluster> _buildCulturalClusters(List<CulturalItem> items) {
+    if (items.isEmpty) return const [];
+
+    final rawZoom = _mapController.camera.zoom.isFinite ? _mapController.camera.zoom : 12.0;
+    final zoom = (rawZoom * 2).floorToDouble() / 2.0;
+
+    // At close zoom levels, stop clustering so user can tap each cultural point.
+    if (zoom >= 16.0) {
+      return items
+        .where((item) => item.latitude.isFinite && item.longitude.isFinite)
+        .map((item) => _CulturalCluster(
+          items: [item],
+          center: LatLng(item.latitude, item.longitude),
+          ))
+        .toList();
+    }
+
+    final cellSizePx = zoom < 9
+        ? 150.0
+        : zoom < 11
+            ? 130.0
+            : zoom < 13
+                ? 110.0
+                : zoom < 15
+                    ? 92.0
+            : zoom < 15.5
+              ? 72.0
+              : 60.0;
+    if (!cellSizePx.isFinite || cellSizePx <= 0) {
+      return items
+          .where((item) => item.latitude.isFinite && item.longitude.isFinite)
+          .map((item) => _CulturalCluster(
+                items: [item],
+                center: LatLng(item.latitude, item.longitude),
+              ))
+          .toList();
+    }
+
+    final grouped = <String, List<CulturalItem>>{};
+    for (final item in items) {
+      if (!item.latitude.isFinite || !item.longitude.isFinite) {
+        continue;
+      }
+      final pixel = _toWorldPixel(LatLng(item.latitude, item.longitude), zoom);
+      if (pixel == null) continue;
+      final px = pixel.dx / cellSizePx;
+      final py = pixel.dy / cellSizePx;
+      if (!px.isFinite || !py.isFinite) continue;
+      final cellX = px.floor();
+      final cellY = py.floor();
+      final key = '$cellX:$cellY';
+      grouped.putIfAbsent(key, () => <CulturalItem>[]).add(item);
+    }
+
+    final clusters = <_CulturalCluster>[];
+    for (final clusterItems in grouped.values) {
+      var latSum = 0.0;
+      var lonSum = 0.0;
+      for (final item in clusterItems) {
+        latSum += item.latitude;
+        lonSum += item.longitude;
+      }
+      final center = LatLng(latSum / clusterItems.length, lonSum / clusterItems.length);
+      clusters.add(_CulturalCluster(items: clusterItems, center: center));
+    }
+
+    return clusters;
+  }
+
+  void _zoomToCluster(_CulturalCluster cluster) {
+    if (cluster.items.isEmpty) return;
+    if (cluster.items.length == 1) {
+      _showCulturalItem(cluster.items.first);
+      return;
+    }
+
+    final points = cluster.items
+        .where((e) => e.latitude.isFinite && e.longitude.isFinite)
+        .map((e) => LatLng(e.latitude, e.longitude))
+        .toList();
+
+    if (points.isEmpty) return;
+
+    if (points.length < 2) {
+      _mapController.move(points.first, (_mapController.camera.zoom + 2).clamp(1.0, 18.0));
+      return;
+    }
+
+    var minLat = points.first.latitude;
+    var maxLat = points.first.latitude;
+    var minLon = points.first.longitude;
+    var maxLon = points.first.longitude;
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLon) minLon = p.longitude;
+      if (p.longitude > maxLon) maxLon = p.longitude;
+    }
+
+    final latSpan = (maxLat - minLat).abs();
+    final lonSpan = (maxLon - minLon).abs();
+    final tooSmallBounds =
+        !latSpan.isFinite ||
+        !lonSpan.isFinite ||
+        (latSpan < 0.00003 && lonSpan < 0.00003); // ~3m
+
+    if (tooSmallBounds) {
+      final center = LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+      // Ensure we reach a zoom level where clusters are split.
+      final targetZoom = max(_mapController.camera.zoom + 1.8, 16.2).clamp(1.0, 18.0);
+      _mapController.move(center, targetZoom);
+      return;
+    }
+
+    final bounds = LatLngBounds.fromPoints(points);
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(60),
+      ),
+    );
+  }
+
+  List<Marker> _buildCulturalMarkers() {
+    final items = _visibleCulturalItems();
+    final clusters = _buildCulturalClusters(items);
+
+    return clusters.map((cluster) {
+      final categories = _clusterCategories(cluster);
+      final isSingle = cluster.items.length == 1 && categories.length == 1;
+      final markerWidthRaw = isSingle ? 50.0 : (categories.length * 34.0 + 18.0).clamp(72.0, 240.0);
+      final markerWidth = markerWidthRaw.isFinite ? markerWidthRaw : 72.0;
+      final markerHeight = 54.0;
+
+      return Marker(
+        point: cluster.center,
+        width: markerWidth,
+        height: markerHeight,
+        child: GestureDetector(
+          onTap: () => _zoomToCluster(cluster),
+          child: isSingle
+              ? Icon(
+                  _iconForType(categories.first.sampleType),
+                  color: _colorForType(categories.first.sampleType),
+                  size: 36,
+                )
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(175),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.green.shade100),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: categories.map((cat) {
+                      final color = _colorForType(cat.sampleType);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(
+                              _iconForType(cat.sampleType),
+                              color: color,
+                              size: 24,
+                            ),
+                            Positioned(
+                              top: -7,
+                              right: -9,
+                              child: Container(
+                                constraints: const BoxConstraints(minWidth: 18),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(9),
+                                  border: Border.all(color: color, width: 1.4),
+                                ),
+                                child: Text(
+                                  '${cat.count}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: color,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+        ),
+      );
+    }).toList();
+  }
+
   Widget _buildNearRouteTile(
     RouteNearItem item, {
     bool isRecommended = false,
@@ -828,9 +1090,13 @@ class _MapScreenState extends State<MapScreen> {
 
   double _calculatePixelRadius(double meters) {
     if (_currentPosition == null) return 0;
+    if (!meters.isFinite || meters <= 0) return 0;
     final zoom = _mapController.camera.zoom;
+    if (!zoom.isFinite) return 0;
     final lat = _currentPosition!.latitude;
+    if (!lat.isFinite) return 0;
     final metersPerPixel = 156543.0339 * cos(lat * pi / 180) / pow(2, zoom);
+    if (!metersPerPixel.isFinite || metersPerPixel <= 0) return 0;
     return meters / metersPerPixel;
   }
 
@@ -1493,32 +1759,7 @@ class _MapScreenState extends State<MapScreen> {
 
               // markers culturales
               if (_nearItems.isNotEmpty)
-                MarkerLayer(
-                    markers: _nearItems
-                      .where((item) =>
-                        _walkingTrack.isEmpty ||
-                        _currentDestination == null ||
-                        item.id == _currentDestination!.id)
-                      .map((item) {
-                    return Marker(
-                      point: LatLng(item.latitude, item.longitude),
-                      width: 44,
-                      height: 44,
-                      child: GestureDetector(
-                        onTap: () => _showCulturalItem(item),
-                        child: AnimatedOpacity(
-                          opacity: 1.0,
-                          duration: const Duration(milliseconds: 500),
-                          child: Icon(
-                            _iconForType(item.type),
-                            color: _colorForType(item.type),
-                            size: 34,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                MarkerLayer(markers: _buildCulturalMarkers()),
 
               // marker ubicación actual
               if (_currentPosition != null)
@@ -1778,5 +2019,27 @@ class _NearRoutesData {
   const _NearRoutesData({
     required this.routes,
     required this.recommendedRouteId,
+  });
+}
+
+class _CulturalCluster {
+  final List<CulturalItem> items;
+  final LatLng center;
+
+  const _CulturalCluster({
+    required this.items,
+    required this.center,
+  });
+}
+
+class _ClusterCategory {
+  final String category;
+  final int count;
+  final String sampleType;
+
+  const _ClusterCategory({
+    required this.category,
+    required this.count,
+    required this.sampleType,
   });
 }
