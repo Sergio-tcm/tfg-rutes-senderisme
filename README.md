@@ -122,9 +122,18 @@ pip install -r requirements.txt
 Configurar variables d’entorn (fitxer `.env` dins `backend/`):
 
 ```env
+APP_ENV=development
 DATABASE_URL=postgresql://usuari:password@host:5432/nom_bd
-JWT_SECRET_KEY=clau_secreta_segura
+JWT_SECRET_KEY=clau_secreta_segura_amb_minim_32_caracters
+JWT_ACCESS_TOKEN_EXPIRES=3600
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
 ```
+
+Notes de seguretat:
+
+* En producció (`APP_ENV=production`), `JWT_SECRET_KEY` és obligatori i ha de ser robust.
+* En producció, `ALLOWED_ORIGINS` és obligatori (no s’admet wildcard `*`).
+* Hi ha una plantilla recomanada a `backend/.env.example`.
 
 Executar servidor Flask:
 
