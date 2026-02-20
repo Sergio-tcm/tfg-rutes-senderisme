@@ -505,6 +505,15 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => _navActionsExpanded = false);
     String? postFinishMessage;
 
+    final routeIdToComplete = _activeNavigationRouteId ?? widget.routeId;
+    final isPoiNavigation = routeIdToComplete == null;
+
+    if (isPoiNavigation) {
+      await _stopNavigation(clearPath: true);
+      _clearNavigationVisualState();
+      return;
+    }
+
     final completed = await _showFinishDecisionSheet();
     if (!completed) {
       await _stopNavigation(clearPath: true);
@@ -512,26 +521,23 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
-    final routeIdToComplete = _activeNavigationRouteId ?? widget.routeId;
-    if (routeIdToComplete != null) {
-      final canPersistCompletion = _routeStartReachedNotified || _allowPreStartCompletionForTesting;
-      if (canPersistCompletion) {
-        try {
-          final completionResult = await _socialService.completeRoute(routeIdToComplete);
-          postFinishMessage =
-              (completionResult['preference_update_message']?.toString().trim().isNotEmpty ?? false)
-              ? completionResult['preference_update_message'].toString()
-              : 'Ruta completada.';
-        } catch (e, st) {
-          debugPrint('[ROUTE_COMPLETE_ERROR] route_id=$routeIdToComplete message=${e.toString().replaceFirst('Exception: ', '')}');
-          debugPrint('[ROUTE_COMPLETE_STACK] $st');
-        }
+    final canPersistCompletion = _routeStartReachedNotified || _allowPreStartCompletionForTesting;
+    if (canPersistCompletion) {
+      try {
+        final completionResult = await _socialService.completeRoute(routeIdToComplete);
+        postFinishMessage =
+            (completionResult['preference_update_message']?.toString().trim().isNotEmpty ?? false)
+            ? completionResult['preference_update_message'].toString()
+            : 'Ruta completada.';
+      } catch (e, st) {
+        debugPrint('[ROUTE_COMPLETE_ERROR] route_id=$routeIdToComplete message=${e.toString().replaceFirst('Exception: ', '')}');
+        debugPrint('[ROUTE_COMPLETE_STACK] $st');
       }
-
-      await _showCompletionFeedbackSheet(routeIdToComplete);
-      if (!mounted) return;
-      await Future.delayed(const Duration(milliseconds: 180));
     }
+
+    await _showCompletionFeedbackSheet(routeIdToComplete);
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 180));
 
     await _stopNavigation(clearPath: true);
     _clearNavigationVisualState();
@@ -570,6 +576,26 @@ class _MapScreenState extends State<MapScreen> {
 
     try {
       await _finishNavigationFlow();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _autoFinishingRoute = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _finishPoiNavigationAutomatically() async {
+    if (!mounted || _autoFinishingRoute || !_navigationMode) return;
+
+    setState(() {
+      _autoFinishingRoute = true;
+      _navActionsExpanded = false;
+    });
+
+    try {
+      await _stopNavigation(clearPath: true);
+      _clearNavigationVisualState();
     } finally {
       if (mounted) {
         setState(() {
@@ -756,6 +782,29 @@ class _MapScreenState extends State<MapScreen> {
 
       if (isNearTail && reachedEnd) {
         unawaited(_finishNavigationFlowAutomatically());
+        return;
+      }
+    }
+
+    if (_navigationMode &&
+        !_autoFinishingRoute &&
+        _activeNavigationRouteId == null &&
+        _currentDestination != null &&
+        path.isNotEmpty &&
+        nearestIndex >= 0) {
+      final tailStartIndex = max(0, path.length - 3);
+      final isNearTail = nearestIndex >= tailStartIndex;
+      final poiLatLng = LatLng(
+        _currentDestination!.latitude,
+        _currentDestination!.longitude,
+      );
+      final distanceToPoiM = _haversineKm(point, poiLatLng) * 1000;
+      final remainingDistanceM = (_remainingDistanceKm ?? double.infinity) * 1000;
+      final reachedPoi = (distanceToPoiM.isFinite && distanceToPoiM <= 25) ||
+          (remainingDistanceM.isFinite && remainingDistanceM <= 30);
+
+      if (isNearTail && reachedPoi) {
+        unawaited(_finishPoiNavigationAutomatically());
         return;
       }
     }
