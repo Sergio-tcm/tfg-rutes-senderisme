@@ -7,6 +7,12 @@ import '../models/route_near_item.dart';
 import 'token_storage.dart';
 
 class RoutesService {
+  String _bodySnippet(String body, {int max = 180}) {
+    final clean = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length <= max) return clean;
+    return '${clean.substring(0, max)}...';
+  }
+
   Future<List<RouteModel>> getRoutes() async {
     final url = Uri.parse('${ApiConfig.baseUrl}/routes');
     final token = await TokenStorage.getToken();
@@ -15,13 +21,20 @@ class RoutesService {
     };
     final res = await http.get(url, headers: headers);
 
+    final body = _safeJsonDecode(res.body);
     if (res.statusCode != 200) {
-      throw Exception('Error carregant rutes (${res.statusCode})');
+      if (body is Map && body['error'] != null) {
+        throw Exception(body['error']);
+      }
+      throw Exception(
+        'Error carregant rutes (${res.statusCode}). Resposta: ${_bodySnippet(res.body)}',
+      );
     }
 
-    final body = jsonDecode(res.body);
     if (body is! List) {
-      throw Exception('Resposta inesperada del servidor');
+      throw Exception(
+        'Resposta no JSON de rutes (HTTP ${res.statusCode}): ${_bodySnippet(res.body)}',
+      );
     }
 
     return body.map<RouteModel>((e) => RouteModel.fromJson(e)).toList();
@@ -48,13 +61,20 @@ class RoutesService {
     };
     final res = await http.get(url, headers: headers);
 
+    final body = _safeJsonDecode(res.body);
     if (res.statusCode != 200) {
-      throw Exception('Error carregant rutes associades');
+      if (body is Map && body['error'] != null) {
+        throw Exception(body['error']);
+      }
+      throw Exception(
+        'Error carregant rutes associades (${res.statusCode}). Resposta: ${_bodySnippet(res.body)}',
+      );
     }
 
-    final body = jsonDecode(res.body);
     if (body is! List) {
-      throw Exception('Resposta inesperada del servidor');
+      throw Exception(
+        'Resposta no JSON de rutes associades (HTTP ${res.statusCode}): ${_bodySnippet(res.body)}',
+      );
     }
 
     return body.map<RouteNearItem>((e) => RouteNearItem.fromJson(e)).toList();
