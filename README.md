@@ -10,18 +10,23 @@
 
 ## Descripció del projecte
 
-Aquest projecte consisteix en el desenvolupament d’una aplicació mòbil per a Android orientada a la visualització i recomanació de rutes de senderisme.
+Aquest projecte consisteix en el desenvolupament d’un sistema complet (app mòbil + backend API) orientat a la planificació, navegació i recomanació intel·ligent de rutes de senderisme.
 
-L’aplicació està desenvolupada amb **Flutter i Dart** i forma part del Treball de Fi de Grau. El sistema permet actualment:
+L’aplicació està desenvolupada amb **Flutter i Dart** i el backend amb **Flask (Python)**. Forma part del Treball de Fi de Grau i actualment permet:
 
-* Visualitzar una llista de rutes de senderisme
-* Consultar el detall d’una ruta
-* Filtrar rutes segons la dificultat
-* Recomanar una ruta segons preferències bàsiques de l’usuari (dificultat i distància màxima)
+* Registre i autenticació d’usuaris (JWT)
+* Visualització de rutes i detall complet de cada ruta
+* Recomanació de rutes segons preferències i perfil físic
+* Navegació guiada sobre mapa amb geolocalització en temps real
+* Detecció de desviació de la ruta i finalització automàtica/manual
+* Integració d’elements culturals associats a les rutes
+* Importació de rutes GPX
+* Sistema social: likes, valoracions i comentaris
+* Favorits per usuari
+* Seguiment de rutes completades i estadístiques personals
+* Adaptació progressiva de preferències segons l’activitat real de l’usuari
 
-El projecte s’ha desenvolupat seguint una arquitectura modular i escalable, preparada per a futures ampliacions com la integració de mapes, fitxers GPX o fonts de dades externes.
-
-Aquest repositori conté el codi font de l’aplicació i s’actualitza progressivament durant el desenvolupament del projecte.
+El projecte s’ha desenvolupat amb una arquitectura modular, separant clarament capa mòbil, serveis d’API i persistència de dades, amb enfocament iteratiu i escalable.
 
 ---
 
@@ -29,6 +34,10 @@ Aquest repositori conté el codi font de l’aplicació i s’actualitza progres
 
 * Flutter
 * Dart
+* Python
+* Flask
+* PostgreSQL
+* JWT (autenticació)
 * Android SDK
 * Android Emulator (AVD)
 * Git i GitHub
@@ -39,22 +48,36 @@ Aquest repositori conté el codi font de l’aplicació i s’actualitza progres
 ## Estructura del projecte
 
 ```
-lib/
- ├─ models/        # Models de dades (ex: rutes)
- ├─ services/      # Serveis i lògica de negoci
- ├─ screens/       # Pantalles de l’aplicació
- ├─ widgets/       # Widgets reutilitzables
- └─ main.dart      # Punt d’entrada de l’aplicació
+tfg-rutes-senderisme/
+ ├─ app/                    # Aplicació Flutter
+ │   ├─ lib/
+ │   │   ├─ config/         # Configuració de connexió API
+ │   │   ├─ models/         # Models de dades
+ │   │   ├─ services/       # Serveis HTTP i lògica client
+ │   │   ├─ screens/        # Pantalles de l’aplicació
+ │   │   ├─ widgets/        # Components reutilitzables
+ │   │   └─ main.dart       # Punt d’entrada
+ │   └─ test/               # Tests Flutter
+ ├─ backend/                # API Flask
+ │   ├─ routes/             # Endpoints (auth, rutes, social, preferències...)
+ │   ├─ services/           # Lògica de domini
+ │   ├─ utils/              # Utilitats
+ │   ├─ db.py               # Connexió base de dades
+ │   ├─ app.py              # Arrencada del servidor Flask
+ │   └─ requirements.txt    # Dependències Python
+ └─ README.md
 ```
 
 ---
 
 ## Requisits previs
 
-Abans d’executar l’aplicació cal tenir instal·lat:
+Abans d’executar el projecte cal tenir instal·lat:
 
 * Git
 * Flutter SDK
+* Python 3.11+ (recomanat)
+* PostgreSQL
 * Android Studio (amb Android SDK i emulador)
 * Visual Studio Code amb:
 
@@ -87,17 +110,48 @@ Obrir la carpeta del projecte amb **Visual Studio Code**.
 
 ---
 
-### 3️⃣ Instal·lar dependències
+### 3️⃣ Configurar i executar el backend
 
-A la terminal:
+Entrar a la carpeta del backend i instal·lar dependències:
 
 ```bash
-flutter pub get
+cd backend
+pip install -r requirements.txt
 ```
+
+Configurar variables d’entorn (fitxer `.env` dins `backend/`):
+
+```env
+DATABASE_URL=postgresql://usuari:password@host:5432/nom_bd
+JWT_SECRET_KEY=clau_secreta_segura
+```
+
+Executar servidor Flask:
+
+```bash
+python app.py
+```
+
+El backend quedarà disponible (per defecte) a `http://localhost:5000`.
 
 ---
 
-### 4️⃣ Crear un dispositiu Android virtual
+### 4️⃣ Configurar i executar l’app Flutter
+
+Entrar a la carpeta de l’app i instal·lar dependències:
+
+```bash
+cd app
+flutter pub get
+```
+
+Comprovar que la URL base de l’API és correcta a:
+
+* `app/lib/config/api_config.dart`
+
+---
+
+### 5️⃣ Crear un dispositiu Android virtual
 
 1. Obrir **Android Studio**
 2. Anar a **Tools → Device Manager**
@@ -107,7 +161,7 @@ flutter pub get
 
 ---
 
-### 5️⃣ Executar l’aplicació
+### 6️⃣ Executar l’aplicació
 
 Amb l’emulador obert:
 
@@ -121,17 +175,25 @@ L’aplicació s’executarà automàticament a l’emulador Android.
 
 ## Estat del projecte
 
-✅ MVP funcional
+✅ Versió funcional avançada (pre-release TFG)
 
 Funcionalitats implementades fins al moment:
 
-* Navegació entre pantalles
-* Llista de rutes amb detall
-* Filtratge per dificultat
-* Recomanació bàsica de rutes
-* Gestió d’estat i dades asíncrones
+* Autenticació i perfil d’usuari
+* Llistat i detall de rutes
+* Recomanació personalitzada amb perfil inicial
+* Adaptació de preferències segons rutes completades
+* Navegació en temps real al mapa
+* Control de desviació i finalització de ruta
+* Elements culturals i rutes associades
+* Importació de rutes GPX
+* Likes, comentaris i valoracions
+* Favorits per usuari
+* Marcatge de rutes completades
+* Pantalla d’estadístiques personals
+* Gestió d’errors HTTP i respostes no JSON amb tolerància a fallades
 
-El projecte es desenvolupa de forma iterativa seguint la planificació definida a l’avantprojecte del TFG.
+El projecte es troba en fase de consolidació final, amb enfocament en estabilitat, validació i documentació per a la versió final del TFG.
 
 ---
 
