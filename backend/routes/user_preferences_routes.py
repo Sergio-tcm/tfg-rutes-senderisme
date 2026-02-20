@@ -132,9 +132,9 @@ def get_preferences():
                         SUM(
                             urc.completion_count *
                             CASE
-                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN 3
-                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' THEN 2
-                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN 1
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%molt%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%muy%%' THEN 3
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%dif%%' THEN 2
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%mitj%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%moder%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%media%%' THEN 1
                                 ELSE 0
                             END
                         )

@@ -113,9 +113,9 @@ def _load_adaptive_snapshot(conn, user_id: int):
                         SUM(
                             urc.completion_count *
                             CASE
-                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN 3
-                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' THEN 2
-                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN 1
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%molt%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%muy%%' THEN 3
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%dif%%' THEN 2
+                                WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%mitj%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%moder%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%media%%' THEN 1
                                 ELSE 0
                             END
                         )
@@ -472,10 +472,10 @@ def personal_stats():
                     MIN(urc.first_completed_at) AS first_completed_at,
                     MAX(urc.last_completed_at) AS last_completed_at,
                     COALESCE(SUM(CASE WHEN urc.last_completed_at >= NOW() - INTERVAL '30 days' THEN 1 ELSE 0 END), 0) AS active_routes_last_30d,
-                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%fàcil%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%facil%' THEN urc.completion_count ELSE 0 END), 0) AS easy_count,
-                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN urc.completion_count ELSE 0 END), 0) AS medium_count,
-                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN urc.completion_count ELSE 0 END), 0) AS very_hard_count,
-                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' AND LOWER(COALESCE(r.difficulty, '')) NOT LIKE '%molt%' AND LOWER(COALESCE(r.difficulty, '')) NOT LIKE '%muy%' THEN urc.completion_count ELSE 0 END), 0) AS hard_count
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%fàcil%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%facil%%' THEN urc.completion_count ELSE 0 END), 0) AS easy_count,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%mitj%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%moder%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%media%%' THEN urc.completion_count ELSE 0 END), 0) AS medium_count,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%molt%%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%%muy%%' THEN urc.completion_count ELSE 0 END), 0) AS very_hard_count,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%%dif%%' AND LOWER(COALESCE(r.difficulty, '')) NOT LIKE '%%molt%%' AND LOWER(COALESCE(r.difficulty, '')) NOT LIKE '%%muy%%' THEN urc.completion_count ELSE 0 END), 0) AS hard_count
                 FROM user_route_completions urc
                 JOIN routes r ON r.route_id = urc.route_id
                 WHERE urc.user_id = %s
