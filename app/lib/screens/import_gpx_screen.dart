@@ -25,12 +25,21 @@ class _ImportGpxScreenState extends State<ImportGpxScreen> {
   final _descCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
 
-  String _difficulty = 'Mitjana';
-  String _estimatedTime = '3h';
   bool _hist = false, _archaeo = false, _arch = false, _nature = true;
 
   bool _loading = false;
   String? _error;
+
+  String _estimatedTimeFromDistance(double distanceKm) {
+    final minutes = ((distanceKm / 4.5) * 60).round();
+    final safeMinutes = minutes < 1 ? 1 : minutes;
+    final hours = safeMinutes ~/ 60;
+    final mins = safeMinutes % 60;
+
+    if (hours <= 0) return '${safeMinutes}min';
+    if (mins == 0) return '${hours}h';
+    return '${hours}h ${mins}min';
+  }
 
   Future<void> _pickGpx() async {
     setState(() {
@@ -89,12 +98,12 @@ class _ImportGpxScreenState extends State<ImportGpxScreen> {
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         distanceKm: _parsed!.distanceKm,
-        difficulty: _difficulty,
+        difficulty: '',
         elevationGain: _parsed!.elevationGain,
         location: _locationCtrl.text.trim().isEmpty
             ? '—'
             : _locationCtrl.text.trim(),
-        estimatedTime: _estimatedTime,
+        estimatedTime: _estimatedTimeFromDistance(_parsed!.distanceKm),
         culturalSummary: '', // lo puedes poner en UI si quieres
         hasHistoricalValue: _hist,
         hasArchaeology: _archaeo,
@@ -229,6 +238,14 @@ class _ImportGpxScreenState extends State<ImportGpxScreen> {
                               ),
                               Text('Desnivell +: ${parsed.elevationGain} m', style: const TextStyle(fontSize: 16)),
                               Text('Punts: ${parsed.pointsCount}', style: const TextStyle(fontSize: 16)),
+                              Text(
+                                'Temps estimat automàtic: ${_estimatedTimeFromDistance(parsed.distanceKm)}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const Text(
+                                'Dificultat: automàtica',
+                                style: TextStyle(fontSize: 16),
+                              ),
                             ],
                           ),
                         ),
@@ -297,75 +314,6 @@ class _ImportGpxScreenState extends State<ImportGpxScreen> {
                     maxLines: 3,
                   ),
                 ),
-                const SizedBox(height: 14),
-
-                AnimatedOpacity(
-                  opacity: 1.0,
-                  duration: const Duration(milliseconds: 500),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Dificultat', style: TextStyle(fontSize: 16)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.green[200]!),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _difficulty,
-                          isExpanded: true,
-                          underline: const SizedBox(),
-                          items: const [
-                            DropdownMenuItem(value: 'Fàcil', child: Text('Fàcil', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: 'Mitjana', child: Text('Mitjana', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: 'Difícil', child: Text('Difícil', style: TextStyle(fontSize: 16))),
-                          ],
-                          onChanged: _loading
-                              ? null
-                              : (v) => setState(() => _difficulty = v!),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                AnimatedOpacity(
-                  opacity: 1.0,
-                  duration: const Duration(milliseconds: 500),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Temps estimat', style: TextStyle(fontSize: 16)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.green[200]!),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _estimatedTime,
-                          isExpanded: true,
-                          underline: const SizedBox(),
-                          items: const [
-                            DropdownMenuItem(value: '1h', child: Text('1h', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: '2h', child: Text('2h', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: '3h', child: Text('3h', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: '4h', child: Text('4h', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: '5h', child: Text('5h', style: TextStyle(fontSize: 16))),
-                            DropdownMenuItem(value: '6h+', child: Text('6h+', style: TextStyle(fontSize: 16))),
-                          ],
-                          onChanged: _loading
-                              ? null
-                              : (v) => setState(() => _estimatedTime = v!),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
                 const SizedBox(height: 14),
 
                 AnimatedOpacity(
