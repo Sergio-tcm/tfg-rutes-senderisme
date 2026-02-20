@@ -11,6 +11,7 @@ import 'map_screen.dart';
 import 'user_preferences_screen.dart';
 import 'user_routes_screen.dart';
 import 'favorite_routes_screen.dart';
+import 'personal_stats_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -328,9 +329,14 @@ class HomeScreen extends StatelessWidget {
               _profileActionButton(
                 label: 'Estadístiques personals',
                 icon: Icons.insights,
-                color: Colors.grey,
-                onPressed: null,
-                subtitle: 'Pròximament',
+                color: Colors.deepPurple,
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PersonalStatsScreen()),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               _profileActionButton(

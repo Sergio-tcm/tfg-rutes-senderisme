@@ -216,4 +216,30 @@ class SocialService {
 
     return data.map<int>((e) => (e as num).toInt()).toSet();
   }
+
+  Future<Map<String, dynamic>> getPersonalStats() async {
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('No hi ha sessió');
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/routes/stats/me');
+    final res = await http.get(url, headers: {
+      'Authorization': 'Bearer $token',
+    });
+
+    final data = _safeJsonDecode(res.body);
+    if (res.statusCode != 200) {
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
+      throw Exception('Error carregant estadístiques (${res.statusCode})');
+    }
+
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Resposta inesperada d\'estadístiques');
+    }
+
+    return data;
+  }
 }

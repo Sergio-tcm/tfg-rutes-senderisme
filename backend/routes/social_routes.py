@@ -434,6 +434,139 @@ def completed_route_ids():
         conn.close()
 
 
+@social_bp.get("/stats/me")
+@jwt_required()
+def personal_stats():
+    user_id = int(get_jwt_identity())
+
+    conn = get_connection()
+    try:
+        _ensure_user_route_completions_table(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(COUNT(*), 0) AS completed_routes_unique,
+                    COALESCE(SUM(urc.completion_count), 0) AS completed_routes_total,
+                    COALESCE(SUM(urc.completion_count * COALESCE(r.distance_km, 0)), 0) AS total_distance_km,
+                    COALESCE(SUM(urc.completion_count * COALESCE(r.elevation_gain, 0)), 0) AS total_elevation_gain_m,
+                    COALESCE(
+                        SUM(urc.completion_count * COALESCE(r.distance_km, 0))
+                        / NULLIF(SUM(urc.completion_count), 0),
+                        0
+                    ) AS avg_distance_km,
+                    COALESCE(
+                        SUM(urc.completion_count * COALESCE(r.elevation_gain, 0))
+                        / NULLIF(SUM(urc.completion_count), 0),
+                        0
+                    ) AS avg_elevation_gain_m,
+                    MIN(urc.first_completed_at) AS first_completed_at,
+                    MAX(urc.last_completed_at) AS last_completed_at,
+                    COALESCE(SUM(CASE WHEN urc.last_completed_at >= NOW() - INTERVAL '30 days' THEN 1 ELSE 0 END), 0) AS active_routes_last_30d,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%fàcil%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%facil%' THEN urc.completion_count ELSE 0 END), 0) AS easy_count,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%mitj%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%moder%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%media%' THEN urc.completion_count ELSE 0 END), 0) AS medium_count,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%molt%' OR LOWER(COALESCE(r.difficulty, '')) LIKE '%muy%' THEN urc.completion_count ELSE 0 END), 0) AS very_hard_count,
+                    COALESCE(SUM(CASE WHEN LOWER(COALESCE(r.difficulty, '')) LIKE '%dif%' AND LOWER(COALESCE(r.difficulty, '')) NOT LIKE '%molt%' AND LOWER(COALESCE(r.difficulty, '')) NOT LIKE '%muy%' THEN urc.completion_count ELSE 0 END), 0) AS hard_count
+                FROM user_route_completions urc
+                JOIN routes r ON r.route_id = urc.route_id
+                WHERE urc.user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT
+                    fitness_level,
+                    preferred_distance,
+                    environment_type,
+                    cultural_interest
+                FROM user_preferences
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            pref = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT r.route_id, r.name, urc.completion_count, urc.last_completed_at
+                FROM user_route_completions urc
+                JOIN routes r ON r.route_id = urc.route_id
+                WHERE urc.user_id = %s
+                ORDER BY urc.completion_count DESC, urc.last_completed_at DESC
+                LIMIT 5
+                """,
+                (user_id,),
+            )
+            top_rows = cur.fetchall()
+
+        completed_unique = int(row[0] or 0)
+        completed_total = int(row[1] or 0)
+
+        difficulty_counts = {
+            "Fàcil": int(row[9] or 0),
+            "Mitjana": int(row[10] or 0),
+            "Difícil": int(row[11] or 0),
+            "Molt Difícil": int(row[12] or 0),
+        }
+
+        top_difficulty = "-"
+        top_count = -1
+        for name, count in difficulty_counts.items():
+            if count > top_count:
+                top_count = count
+                top_difficulty = name
+
+        base_fitness = (pref[0] if pref else None) or "mitjana"
+        base_distance = float(pref[1]) if pref and pref[1] is not None else 10.0
+        adaptive = _load_adaptive_snapshot(conn, user_id)
+
+        return jsonify({
+            "completed_routes_unique": completed_unique,
+            "completed_routes_total": completed_total,
+            "total_distance_km": round(float(row[2] or 0), 2),
+            "total_elevation_gain_m": int(round(float(row[3] or 0))),
+            "avg_distance_km": round(float(row[4] or 0), 2),
+            "avg_elevation_gain_m": round(float(row[5] or 0), 1),
+            "first_completed_at": row[6].isoformat() if row[6] else None,
+            "last_completed_at": row[7].isoformat() if row[7] else None,
+            "active_routes_last_30d": int(row[8] or 0),
+            "difficulty_counts": difficulty_counts,
+            "top_difficulty": top_difficulty,
+            "initial_preferences": {
+                "fitness_level": base_fitness,
+                "preferred_distance": base_distance,
+                "environment_type": (pref[2] if pref else None),
+                "cultural_interest": (pref[3] if pref else None),
+            },
+            "effective_preferences": {
+                "fitness_level": adaptive.get("effective_fitness_level"),
+                "max_difficulty": adaptive.get("effective_max_difficulty"),
+                "preferred_distance": adaptive.get("effective_preferred_distance"),
+            },
+            "preferences_changed": {
+                "fitness_level": (adaptive.get("effective_fitness_level") or "").lower() != (base_fitness or "").lower(),
+                "preferred_distance": abs(float(adaptive.get("effective_preferred_distance") or base_distance) - float(base_distance)) >= 0.2,
+            },
+            "top_completed_routes": [
+                {
+                    "route_id": int(r[0]),
+                    "name": r[1] or "",
+                    "completion_count": int(r[2] or 0),
+                    "last_completed_at": r[3].isoformat() if r[3] else None,
+                }
+                for r in top_rows
+            ],
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Error carregant estadístiques: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+
 @social_bp.get("/<int:route_id>/ratings")
 def list_ratings(route_id: int):
     conn = get_connection()
