@@ -441,6 +441,14 @@ def personal_stats():
 
     conn = get_connection()
     try:
+        def _at(values, index, default=None):
+            if values is None:
+                return default
+            if index < 0 or index >= len(values):
+                return default
+            value = values[index]
+            return default if value is None else value
+
         _ensure_user_route_completions_table(conn)
 
         with conn.cursor() as cur:
@@ -503,14 +511,14 @@ def personal_stats():
             )
             top_rows = cur.fetchall()
 
-        completed_unique = int(row[0] or 0)
-        completed_total = int(row[1] or 0)
+        completed_unique = int(_at(row, 0, 0) or 0)
+        completed_total = int(_at(row, 1, 0) or 0)
 
         difficulty_counts = {
-            "Fàcil": int(row[9] or 0),
-            "Mitjana": int(row[10] or 0),
-            "Difícil": int(row[11] or 0),
-            "Molt Difícil": int(row[12] or 0),
+            "Fàcil": int(_at(row, 9, 0) or 0),
+            "Mitjana": int(_at(row, 10, 0) or 0),
+            "Difícil": int(_at(row, 12, 0) or 0),
+            "Molt Difícil": int(_at(row, 11, 0) or 0),
         }
 
         top_difficulty = "-"
@@ -520,27 +528,27 @@ def personal_stats():
                 top_count = count
                 top_difficulty = name
 
-        base_fitness = (pref[0] if pref else None) or "mitjana"
-        base_distance = float(pref[1]) if pref and pref[1] is not None else 10.0
+        base_fitness = (_at(pref, 0, None) if pref else None) or "mitjana"
+        base_distance = float(_at(pref, 1, 10.0) or 10.0)
         adaptive = _load_adaptive_snapshot(conn, user_id)
 
         return jsonify({
             "completed_routes_unique": completed_unique,
             "completed_routes_total": completed_total,
-            "total_distance_km": round(float(row[2] or 0), 2),
-            "total_elevation_gain_m": int(round(float(row[3] or 0))),
-            "avg_distance_km": round(float(row[4] or 0), 2),
-            "avg_elevation_gain_m": round(float(row[5] or 0), 1),
-            "first_completed_at": row[6].isoformat() if row[6] else None,
-            "last_completed_at": row[7].isoformat() if row[7] else None,
-            "active_routes_last_30d": int(row[8] or 0),
+            "total_distance_km": round(float(_at(row, 2, 0) or 0), 2),
+            "total_elevation_gain_m": int(round(float(_at(row, 3, 0) or 0))),
+            "avg_distance_km": round(float(_at(row, 4, 0) or 0), 2),
+            "avg_elevation_gain_m": round(float(_at(row, 5, 0) or 0), 1),
+            "first_completed_at": (_at(row, 6, None).isoformat() if _at(row, 6, None) else None),
+            "last_completed_at": (_at(row, 7, None).isoformat() if _at(row, 7, None) else None),
+            "active_routes_last_30d": int(_at(row, 8, 0) or 0),
             "difficulty_counts": difficulty_counts,
             "top_difficulty": top_difficulty,
             "initial_preferences": {
                 "fitness_level": base_fitness,
                 "preferred_distance": base_distance,
-                "environment_type": (pref[2] if pref else None),
-                "cultural_interest": (pref[3] if pref else None),
+                "environment_type": (_at(pref, 2, None) if pref else None),
+                "cultural_interest": (_at(pref, 3, None) if pref else None),
             },
             "effective_preferences": {
                 "fitness_level": adaptive.get("effective_fitness_level"),

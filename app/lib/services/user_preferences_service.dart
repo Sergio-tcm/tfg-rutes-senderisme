@@ -5,6 +5,20 @@ import '../config/api_config.dart';
 import '../services/token_storage.dart';
 
 class UserPreferencesService {
+  dynamic _safeJsonDecode(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _bodySnippet(String body, {int max = 180}) {
+    final clean = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length <= max) return clean;
+    return '${clean.substring(0, max)}...';
+  }
+
   Future<Map<String, dynamic>> getPreferences() async {
     final token = await TokenStorage.getToken();
     if (token == null || token.isEmpty) {
@@ -16,13 +30,24 @@ class UserPreferencesService {
       'Authorization': 'Bearer $token',
     });
 
-    final data = jsonDecode(res.body);
+    final data = _safeJsonDecode(res.body);
 
     if (res.statusCode != 200) {
-      throw Exception(data['error'] ?? 'Error carregant preferències');
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
+      throw Exception(
+        'Error carregant preferències (HTTP ${res.statusCode}). Resposta: ${_bodySnippet(res.body)}',
+      );
     }
 
-    return data is Map<String, dynamic> ? data : {};
+    if (data is! Map<String, dynamic>) {
+      throw Exception(
+        'Resposta no JSON en preferències (HTTP ${res.statusCode}): ${_bodySnippet(res.body)}',
+      );
+    }
+
+    return data;
   }
 
   Future<Map<String, dynamic>> upsertPreferences({
@@ -51,12 +76,23 @@ class UserPreferencesService {
       }),
     );
 
-    final data = jsonDecode(res.body);
+    final data = _safeJsonDecode(res.body);
 
     if (res.statusCode != 200) {
-      throw Exception(data['error'] ?? 'Error guardant preferències');
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
+      throw Exception(
+        'Error guardant preferències (HTTP ${res.statusCode}). Resposta: ${_bodySnippet(res.body)}',
+      );
     }
 
-    return data as Map<String, dynamic>;
+    if (data is! Map<String, dynamic>) {
+      throw Exception(
+        'Resposta no JSON guardant preferències (HTTP ${res.statusCode}): ${_bodySnippet(res.body)}',
+      );
+    }
+
+    return data;
   }
 }

@@ -156,7 +156,11 @@ class _RecommendScreenState extends State<RecommendScreen> {
               if (snapshot.hasError) {
                 return _ErrorState(
                   message: 'Error carregant rutes',
-                  onRetry: () => setState(() => _dataFuture = _loadData()),
+                  onRetry: () {
+                    setState(() {
+                      _dataFuture = _loadData();
+                    });
+                  },
                 );
               }
 
