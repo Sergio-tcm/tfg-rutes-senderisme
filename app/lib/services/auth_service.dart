@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../services/token_storage.dart';
@@ -11,17 +12,32 @@ class AuthService {
     Map<String, dynamic>? preferences,
   }) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/auth/register');
+    final requestBody = {
+      'name': name,
+      'email': email,
+      'password': password,
+      if (preferences != null) 'preferences': preferences,
+    };
+    final encodedBody = jsonEncode(requestBody);
 
-    final res = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'password': password,
-        if (preferences != null) 'preferences': preferences,
-      }),
-    );
+    debugPrint('[AuthService.register] URL: $url');
+    debugPrint('[AuthService.register] Body: $encodedBody');
+
+    late final http.Response res;
+    try {
+      res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: encodedBody,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[AuthService.register] Request failed: $e');
+      debugPrint('[AuthService.register] StackTrace: $stackTrace');
+      rethrow;
+    }
+
+    debugPrint('[AuthService.register] Status code: ${res.statusCode}');
+    debugPrint('[AuthService.register] Response body: ${res.body}');
 
     final data = _safeJsonDecode(res.body);
 
